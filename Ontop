@@ -35,6 +35,20 @@ pcall(function()
  ObsidianLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua"))()
 end)
 
+-- FIX SLIDERS: Obsidian congela TODOS los sliders/dropdowns cuando IsRobloxFocused = false.
+-- Muchos executors disparan WindowFocusReleased al tocar la UI (o nunca disparan WindowFocused)
+-- y los sliders se quedan muertos (los toggles siguen funcionando porque usan MouseButton1Click).
+-- Solucion: forzar IsRobloxFocused = true siempre para que los sliders SIEMPRE respondan.
+if ObsidianLib then
+ pcall(function() ObsidianLib.IsRobloxFocused = true end)
+ task.spawn(function()
+  while ObsidianLib do
+   pcall(function() ObsidianLib.IsRobloxFocused = true end)
+   task.wait(0.5)
+  end
+ end)
+end
+
 local _elementCounter = 0
 local function _genIdx()
  _elementCounter = _elementCounter + 1
@@ -2126,7 +2140,7 @@ aN:Section({Title = "AUTO SHOOT / RELOAD:"})
 local shotMultiplier = 1
 local autoShootEnabled = false
 local autoReloadEnabled = false
-local autoShootInterval = 0.08
+local autoShootInterval = 0.30
 
 local function findGunTool(char)
  if not char then return nil end
@@ -2184,11 +2198,6 @@ local function fireAtClosestTarget()
  if not myHead then return end
  local gunTool = findGunTool(char)
  if not gunTool then return end
- local ammo = getGunAmmo(gunTool)
- if ammo <= 0 then
- doReload(gunTool)
- return
- end
  local target = getClosestTarget()
  if not target or not target.Character then return end
  if isInSafeZone(target) then return end
@@ -2211,10 +2220,24 @@ local function fireAtClosestTarget()
  end)
  if not headVisible and not torsoVisible then return end
 
+ -- SHOT MULTIPLIER: dispara N veces por rafaga (ajustable con el slider Shot Multiplier)
+ local mult = math.clamp(math.floor(tonumber(shotMultiplier) or 1), 1, 5)
+ for shot = 1, mult do
+ local charS = r.Character
+ if not charS then return end
+ local headS = charS:FindFirstChild("Head")
+ if not headS then return end
+ local gunS = findGunTool(charS) or gunTool
+ local ammo = getGunAmmo(gunS)
+ if ammo <= 0 then
+ doReload(gunS)
+ return
+ end
+ -- reapunta en cada disparo (el target se mueve)
  local aimPart = headVisible and tHead or tTorso
- if not aimPart then return end
+ if not (aimPart and aimPart.Parent) then return end
  local aimPos = aimPart.Position
- local shootCFrame = CFrame.new(myHead.Position, aimPos)
+ local shootCFrame = CFrame.new(headS.Position, aimPos)
  local hitData = {
  [1] = {
  [1] = {
@@ -2231,7 +2254,11 @@ local function fireAtClosestTarget()
  end
  local ctr = (aC and aC.event) or aq
  if E then
- pcall(function() E:FireServer(ctr, "shoot_gun", gunTool, shootCFrame, hitData) end)
+ pcall(function() E:FireServer(ctr, "shoot_gun", gunS, shootCFrame, hitData) end)
+ end
+ if shot < mult then
+ task.wait(0.13)
+ end
  end
  end)
 end
@@ -2285,10 +2312,11 @@ D:Register("AutoShoot", autoShootToggle)
 
 local autoShootSpeedSlider = aN:Slider({
  Title = "Auto Shoot Speed",
+ Desc = "Segundos entre rafagas (menor = mas rapido)",
  Step = 0.01,
- Value = {Min = 0.03, Max = 0.5, Default = 0.08},
+ Value = {Min = 0.05, Max = 2, Default = 0.30},
  Callback = function(val)
- autoShootInterval = tonumber(val) or 0.08
+ autoShootInterval = tonumber(val) or 0.30
  end
 })
 D:Register("AutoShootSpeed", autoShootSpeedSlider)
@@ -3593,6 +3621,44 @@ aS:Slider({
  Value = {Min = 0, Max = 10, Default = FC.COMBAT_AT},
  Callback = function(v)
  FC.COMBAT_AT = tonumber(v) or 2
+ end
+})
+
+-- AJUSTE MANUAL (escribir numero): fallback garantizado por si los sliders no responden en tu executor
+aS:Section({Title = "AJUSTE MANUAL DEL FARM (escribir):"})
+aS:Input({
+ Title = "Farm: velocidad glide (escribir)",
+ Desc = "Escribe el numero y presiona Enter",
+ Placeholder = tostring(FC.TWEEN_SPEED),
+ Callback = function(txt)
+ local num = tonumber(tostring(txt):match("%d+%.?%d*") or "")
+ if num then
+ FC.TWEEN_SPEED = math.clamp(num, 5, 300)
+ if A then A:Notify({Title = "Farm speed = " .. FC.TWEEN_SPEED, Duration = 2}) end
+ end
+ end
+})
+aS:Input({
+ Title = "Circulo: espera en s (escribir)",
+ Placeholder = tostring(FC.CIRCLE_WAIT),
+ Callback = function(txt)
+ local num = tonumber(tostring(txt):match("%d+%.?%d*") or "")
+ if num then
+ FC.CIRCLE_WAIT = math.clamp(num, 1, 60)
+ if A then A:Notify({Title = "Espera en circulo = " .. FC.CIRCLE_WAIT .. "s", Duration = 2}) end
+ end
+ end
+})
+aS:Input({
+ Title = "Auto Shoot: intervalo en s (escribir)",
+ Desc = "Segundos entre rafagas del auto shoot",
+ Placeholder = tostring(autoShootInterval),
+ Callback = function(txt)
+ local num = tonumber(tostring(txt):match("%d+%.?%d*") or "")
+ if num then
+ autoShootInterval = math.clamp(num, 0.05, 3)
+ if A then A:Notify({Title = "Auto Shoot intervalo = " .. autoShootInterval .. "s", Duration = 2}) end
+ end
  end
 })
 
