@@ -2469,7 +2469,10 @@ local FC_REACH = 3
 local FC_TWEEN_SPEED = 30 -- velocidad del movimiento del farm (studs por segundo, estilo MM2) - sube o baja aqui
 local FC_CIRCLE_WAIT = 12 -- segundos que espera en cada circulo azul antes de ir a agarrar con E
 local FC_CLICK_WAIT = 3 -- segundos de espera en el punto 6 antes de hacer click en el medio
--- Ruta: action = "walk" | "grab" (presiona E) | "circle" (va SOLO si hay circulo azul real - ignora botes de basura - espera 12s) | "click" (punto 6: espera 3s y click en el medio)
+local FC_CIRCLE_CLICK_AT = 10 -- segundo (dentro de la espera del circulo) en que hace el click
+local FC_CLICK_DOWN_Y = 0.7 -- altura del click en el circulo: 0.5 = centro de pantalla, 0.7 = centro pero abajo
+local FC_GRAB_POS = Vector3.new(-279.103119, 256.34906, 335.235107) -- coordenadas de la E: aqui va a agarrar despues de CADA circulo
+-- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo circulo azul real; espera 12s, click al segundo 10 y LUEGO VA A LA E A AGARRAR) | "click" (punto 6: 3s + click centro)
 local FC_ROUTE = {
  {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
  {Vector3.new(-226.22644, 255.099686, 326.575897), "walk"},
@@ -2485,9 +2488,9 @@ local FC_ROUTE = {
  {Vector3.new(-266.716278, 256.34906, 337.80896), "circle"},
  {Vector3.new(-261.974487, 256.34906, 350.103363), "circle"},
  {Vector3.new(-251.023392, 256.34906, 337.518616), "circle"},
- {Vector3.new(-279.103119, 256.34906, 335.235107), "grab"},
+ {Vector3.new(-279.103119, 256.34906, 335.235107), "walk"},
 }
--- Ciclo: circulo (espera 12s) -> coordenada de la E (agarra) -> circulo -> asi repite. El punto 6 espera 3s y hace click en el medio
+-- Ciclo: circulo (espera 12s, click al segundo 10) -> coordenadas de la E (agarra) -> siguiente circulo -> ... -> lo hace de nuevo. Punto 6: espera 3s y click en el medio
 local FC_LOOP_START = 11
 
 local function fcGetChar()
@@ -2654,11 +2657,12 @@ local function fcTweenTo(pos)
  return (flat - p2.Position).Magnitude <= FC_REACH + 1
 end
 
--- Click en el medio de la pantalla (mismo metodo que el auto ATM del script)
-local function fcClickCenter()
+-- Click con VirtualInputManager (mismo metodo que el auto ATM del script); yFactor 0.5 = centro, 0.7 = centro pero abajo
+local function fcClickAt(yFactor)
  local ok = pcall(function()
  local cam = workspace.CurrentCamera
- local x, y = cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2
+ local x = cam.ViewportSize.X / 2
+ local y = cam.ViewportSize.Y * yFactor
  VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
  task.wait(0.05)
  VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
@@ -2667,11 +2671,15 @@ local function fcClickCenter()
  pcall(function()
  if type(mousemoveabs) == "function" then
  local cam = workspace.CurrentCamera
- mousemoveabs(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+ mousemoveabs(cam.ViewportSize.X / 2, cam.ViewportSize.Y * yFactor)
  end
  mouse1click()
  end)
  end
+end
+
+local function fcClickCenter()
+ fcClickAt(0.5)
 end
 
 local function fcBlueDominant(c)
@@ -2845,17 +2853,36 @@ local function fcPressE(pos)
  task.wait(0.45)
 end
 
--- Espera FIJA en el circulo (12s) manteniendo la posicion, luego sigue la ruta (va a la E y agarra)
+-- Espera en el circulo: mantiene posicion; si el circulo desaparece antes de tiempo SALE YA y sigue hacia la E sin buguearse;
+-- al pasar 10 segundos en el circulo hace UN click en el centro pero abajo
 local function fcStayAtCircle(pos, segundos)
  local t0 = os.clock()
+ local clicked = false
+ local goneT = 0
  while FarmCookingRunning and os.clock() - t0 < segundos do
+ local elapsed = os.clock() - t0
+ -- circulo desaparecido: confirmar 0.75s seguidos sin circulo para no buguearse con parpadeos/animaciones
+ if fcFindBlueCircle(pos) then
+ goneT = 0
+ else
+ goneT = goneT + 0.25
+ if goneT >= 0.75 then
+ return true
+ end
+ end
+ -- mantener la posicion sobre el circulo
  pcall(function()
  local _, hum, hrp = fcGetChar()
  if hum and hrp then
  hum:MoveTo(Vector3.new(pos.X, hrp.Position.Y, pos.Z))
  end
  end)
- task.wait(0.5)
+ -- click centro-abajo al pasar los 10 segundos
+ if not clicked and elapsed >= FC_CIRCLE_CLICK_AT then
+ clicked = true
+ fcClickAt(FC_CLICK_DOWN_Y)
+ end
+ task.wait(0.25)
  end
  return FarmCookingRunning
 end
@@ -2877,6 +2904,15 @@ local function farmCookingLoop()
  end
  if FarmCookingRunning then
  fcStayAtCircle(wp[1], FC_CIRCLE_WAIT)
+ end
+ -- despues del circulo: va a las coordenadas de la E, agarra, y lo hace de nuevo con el siguiente circulo
+ if FarmCookingRunning then
+ if not fcTweenTo(FC_GRAB_POS) then
+ fcWalkTo(FC_GRAB_POS)
+ end
+ if FarmCookingRunning then
+ fcPressE(FC_GRAB_POS)
+ end
  end
  task.wait(0.3)
  end
@@ -2913,7 +2949,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Movimiento tween (glide). En el circulo azul espera 12s, luego va a la E y agarra, y repite. Punto 6: espera 3s y hace click en el medio. Ignora botes de basura.",
+ Desc = "Tween glide. Cada circulo azul: espera 12s (o menos si desaparece), click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
