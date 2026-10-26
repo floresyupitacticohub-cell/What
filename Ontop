@@ -2309,7 +2309,7 @@ end)
 end
 do
 
-aS:Section({Title = "MODS:"})
+aN:Section({Title = "MODS:"})
 
 local aT = c:WaitForChild("Items"):WaitForChild("gun")
 
@@ -2409,7 +2409,7 @@ r.Character.ChildAdded:Connect(function(aU)
  end
 end)
 
-aS:Slider({
+aN:Slider({
  Title = "Fire Rate",
  Step = 10,
  Value = {Min = 100, Max = 10000, Default = 1000},
@@ -2418,7 +2418,7 @@ aS:Slider({
  end
 })
 
-aS:Slider({
+aN:Slider({
  Title = "Accuracy",
  Step = 0.01,
  Value = {Min = 0, Max = 1, Default = 1},
@@ -2427,7 +2427,7 @@ aS:Slider({
  end
 })
 
-aS:Slider({
+aN:Slider({
  Title = "Recoil",
  Step = 0.1,
  Value = {Min = 0, Max = 10, Default = 0},
@@ -2436,7 +2436,7 @@ aS:Slider({
  end
 })
 
-aS:Slider({
+aN:Slider({
  Title = "Reload Time",
  Step = 0.1,
  Value = {Min = 0.1, Max = 10, Default = 0.1},
@@ -2445,7 +2445,7 @@ aS:Slider({
  end
 })
 
-aS:Toggle({
+aN:Toggle({
  Title = "Automatic",
  Icon = "check",
  Type = "Checkbox",
@@ -2482,6 +2482,8 @@ FC.CIRCLE_MAX_DRIFT = 4 -- si se aleja mas de esto del centro, el iman lo regres
 FC.TRAIL_SPACING = 2.5 -- puntos azules del rastro: uno cada X studs pisados
 FC.TRAIL_LIFE = 20 -- segundos de vida de cada punto del rastro
 FC.PointsEnabled = true -- puntos azules: marcadores de ruta + rastro + objetivo
+FC.CIRCLE_SEARCH = 60 -- RUTA OPTIMIZADA: radio (studs) donde busca el circulo azul REAL (cerca del punto de ruta Y cerca de ti)
+FC.SKIP_WAIT = 3 -- si no encuentra circulo azul real, espera corto y sigue (no se queda clavado)
 -- Ruta: action = "walk" | "grab" (presiona E) | "circle" (va SOLO si hay circulo azul real - ignora botes de basura - espera 12s) | "click" (punto 6: espera 3s y click en el medio)
 FC.ROUTE = {
  {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
@@ -2604,6 +2606,17 @@ local function fcSpawnRouteMarkers()
  table.insert(FC.Markers, m)
  end)
  end
+end
+
+-- Corrige el marcador de ruta i a la posicion REAL del circulo encontrado
+local function fcMoveMarker(i, pos)
+ if not FC.PointsEnabled then return end
+ pcall(function()
+ local m = FC.Markers[i]
+ if m and m.Parent then
+ m.Position = Vector3.new(pos.X, pos.Y + 1.1, pos.Z)
+ end
+ end)
 end
 
 local function fcSpawnTrailDot(pos)
@@ -2976,7 +2989,17 @@ local function fcFindBlueCircleInRadius(pos, radius)
  if blue then
  local d = (part.Position - pos).Magnitude
  local flatBonus = math.max(0, 3 - sY) * 2
- local score = -d + flatBonus
+ local nameBonus = 0
+ local nmScan = string.lower(tostring(part.Name)) .. " " .. string.lower(tostring(mdl and mdl.Name or ""))
+ if nmScan:find("cook", 1, true) or nmScan:find("pot", 1, true) or nmScan:find("circle", 1, true)
+ or nmScan:find("food", 1, true) or nmScan:find("soup", 1, true) or nmScan:find("stove", 1, true) then
+ nameBonus = 15
+ end
+ if nmScan:find("car", 1, true) or nmScan:find("vehicle", 1, true) or nmScan:find("truck", 1, true)
+ or nmScan:find("bike", 1, true) or nmScan:find("wheel", 1, true) then
+ nameBonus = nameBonus - 20
+ end
+ local score = -d + flatBonus + nameBonus
  if not bestScore or score > bestScore then
  best, bestScore = part, score
  end
@@ -2994,6 +3017,26 @@ end
 local function fcFindBlueCircle(pos)
  -- primero el radio normal; si no encuentra, amplia la busqueda (el circulo puede estar un poco off del punto de ruta)
  return fcFindBlueCircleInRadius(pos, FC.BLUE_RADIUS) or fcFindBlueCircleInRadius(pos, 25)
+end
+
+-- RUTA OPTIMIZADA: busca el mejor circulo azul REAL entre varios centros
+-- (el punto de ruta y tu posicion actual) y devuelve el mas cercano a ti
+local function fcFindBestCircle(centers, radius)
+ local best, bestD
+ local _, _, hrpB = fcGetChar()
+ for _, cpos in ipairs(centers) do
+ if cpos then
+ local part = fcFindBlueCircleInRadius(cpos, radius)
+ if part then
+ local ref = hrpB or cpos
+ local d = (part.Position - ref).Magnitude
+ if not bestD or d < bestD then
+ best, bestD = part, d
+ end
+ end
+ end
+ end
+ return best
 end
 
 local function fcIsBlueCircleNear(pos)
@@ -3202,10 +3245,10 @@ local function fcStayAtCircle(pos, segundos)
  if elapsed >= segundos then break end
  local char, hum, hrp = fcGetChar()
  if char then
- -- re-localiza el circulo azul real cada 1s (por si se mueve o el punto de ruta queda off)
+ -- re-localiza el circulo azul real cada 1s (busca cerca del punto Y cerca de ti)
  if fcClock() - lastRefind >= 1 then
  lastRefind = fcClock()
- local c2 = fcFindBlueCircle(pos) or fcFindBlueCircle(hrp.Position)
+ local c2 = fcFindBestCircle({pos, hrp.Position}, FC.CIRCLE_SEARCH)
  if c2 then
  center = Vector3.new(c2.Position.X, pos.Y, c2.Position.Z)
  end
@@ -3287,15 +3330,16 @@ local function farmCookingLoop()
  local action = wp[2]
  fcSetTarget(wp[1])
  if action == "circle" then
- local circ = fcFindBlueCircle(wp[1])
- local cpos = wp[1]
+ -- RUTA OPTIMIZADA: busca el circulo azul REAL cerca del punto de ruta Y cerca de ti
+ local _, _, hrpC = fcGetChar()
+ local circ = fcFindBestCircle({wp[1], hrpC and hrpC.Position or nil}, FC.CIRCLE_SEARCH)
  if circ then
  -- X/Z del centro real del circulo, Y de ruta (altura buena conocida)
- cpos = Vector3.new(circ.Position.X, wp[1].Y, circ.Position.Z)
- end
+ local cpos = Vector3.new(circ.Position.X, wp[1].Y, circ.Position.Z)
+ fcMoveMarker(idx, cpos) -- el marcador del punto se corrige a la posicion real
  fcSetTarget(cpos)
  if not fcTweenTo(cpos) then
- fcWalkTo(wp[1])
+ fcWalkTo(cpos)
  end
  -- correccion final: quedar clavado en el centro real del circulo
  if FarmCookingRunning then
@@ -3309,6 +3353,16 @@ local function farmCookingLoop()
  end
  if FarmCookingRunning then
  fcStayAtCircle(cpos, FC.CIRCLE_WAIT)
+ end
+ else
+ -- no hay circulo azul real cerca: NO se queda clavado, espera corto y sigue
+ fcSetTarget(wp[1])
+ if not fcTweenTo(wp[1]) then
+ fcWalkTo(wp[1])
+ end
+ if FarmCookingRunning then
+ fcStayAtCircle(wp[1], FC.SKIP_WAIT)
+ end
  end
  task.wait(0.3)
  else
@@ -3353,7 +3407,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Glide tween. Para clavado en el centro del circulo azul (iman anti-drift). A los 2s en el circulo: tecla 1 + Melee Aura + Auto Attack + Anti Kill. A los 10s: click mas abajo. Punto 6: click un poco abajo. Si detecta TP de 10 studs: pausa 4s con notificacion. Puntos azules de ruta + rastro.",
+ Desc = "RUTA OPTIMIZADA: busca el circulo azul REAL cerca del punto y cerca de ti (no se queda clavado). Iman al centro del circulo. Combate auto. Si no hay circulo cerca espera corto y sigue. Todos los ajustes son sliders abajo.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
@@ -3386,7 +3440,7 @@ aS:Slider({
  Title = "Farm: velocidad glide",
  Desc = "Studs por segundo del movimiento del farm",
  Step = 1,
- Value = {Min = 10, Max = 80, Default = FC.TWEEN_SPEED},
+ Value = {Min = 10, Max = 200, Default = FC.TWEEN_SPEED},
  Callback = function(v)
  FC.TWEEN_SPEED = tonumber(v) or 30
  end
@@ -3479,6 +3533,66 @@ aS:Slider({
  Value = {Min = 3, Max = 120, Default = FC.TRAIL_LIFE},
  Callback = function(v)
  FC.TRAIL_LIFE = tonumber(v) or 20
+ end
+})
+
+aS:Slider({
+ Title = "Farm: alcance (REACH)",
+ Desc = "Distancia para considerar que llego al punto",
+ Step = 0.5,
+ Value = {Min = 1, Max = 10, Default = FC.REACH},
+ Callback = function(v)
+ FC.REACH = tonumber(v) or 3
+ end
+})
+
+aS:Slider({
+ Title = "Farm: radio del circulo azul",
+ Desc = "Radio para detectar el circulo azul real",
+ Step = 1,
+ Value = {Min = 3, Max = 30, Default = FC.BLUE_RADIUS},
+ Callback = function(v)
+ FC.BLUE_RADIUS = tonumber(v) or 10
+ end
+})
+
+aS:Slider({
+ Title = "Farm: busqueda de circulo (studs)",
+ Desc = "RUTA OPTIMIZADA: radio grande donde busca el circulo real (punto de ruta y tu posicion)",
+ Step = 5,
+ Value = {Min = 10, Max = 150, Default = FC.CIRCLE_SEARCH},
+ Callback = function(v)
+ FC.CIRCLE_SEARCH = tonumber(v) or 60
+ end
+})
+
+aS:Slider({
+ Title = "Farm: iman clavado (studs)",
+ Desc = "Si esta a menos de esto del centro del circulo, queda clavado ahi",
+ Step = 0.1,
+ Value = {Min = 0.5, Max = 6, Default = FC.CIRCLE_LOCK_DIST},
+ Callback = function(v)
+ FC.CIRCLE_LOCK_DIST = tonumber(v) or 1.2
+ end
+})
+
+aS:Slider({
+ Title = "Farm: iman max drift (studs)",
+ Desc = "Si se aleja mas de esto del centro, el iman lo regresa al circulo",
+ Step = 1,
+ Value = {Min = 1, Max = 15, Default = FC.CIRCLE_MAX_DRIFT},
+ Callback = function(v)
+ FC.CIRCLE_MAX_DRIFT = tonumber(v) or 4
+ end
+})
+
+aS:Slider({
+ Title = "Farm: combate a los (s)",
+ Desc = "Segundos en el circulo antes de activar tecla 1 + melee + anti kill",
+ Step = 1,
+ Value = {Min = 0, Max = 10, Default = FC.COMBAT_AT},
+ Callback = function(v)
+ FC.COMBAT_AT = tonumber(v) or 2
  end
 })
 
@@ -3764,7 +3878,7 @@ do
     end)
 end
 
-aS:Section({Title = "COMBAT"})
+aN:Section({Title = "COMBAT"})
 
 local function modifyFists(aU, aV)
  if aU then
@@ -3830,7 +3944,7 @@ r.CharacterAdded:Connect(function()
  if ay then checkAndModifyFists() end
 end)
 
-local meleeAuraToggle = aS:Toggle({
+local meleeAuraToggle = aN:Toggle({
  Title = "Melee Aura",
  Desc = "WideFists",
  Default = false,
@@ -3841,7 +3955,7 @@ local meleeAuraToggle = aS:Toggle({
 D:Register("Fists Modifier", meleeAuraToggle)
 FC.UI.MeleeAura = meleeAuraToggle -- el farm puede sincronizar este toggle
 
-local aV = aS:Toggle({
+local aV = aN:Toggle({
  Title = "Auto Attack",
  Default = false,
  Callback = function(aV)
