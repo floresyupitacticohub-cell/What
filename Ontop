@@ -2464,7 +2464,7 @@ local VIM = game:GetService("VirtualInputManager")
 local FarmCookingRunning = false
 local FC_BLUE_RADIUS = 10
 local FC_REACH = 3
--- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo va si hay circulo azul)
+-- Ruta: action = "walk" | "grab" (presiona E) | "circle" (va si hay circulo azul y SE QUEDA hasta que desaparezca)
 local FC_ROUTE = {
  {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
  {Vector3.new(-226.22644, 255.099686, 326.575897), "walk"},
@@ -2479,11 +2479,12 @@ local FC_ROUTE = {
  {Vector3.new(-277.448273, 256.34903, 351.433807), "circle"},
  {Vector3.new(-266.716278, 256.34906, 337.80896), "circle"},
  {Vector3.new(-261.974487, 256.34906, 350.103363), "circle"},
- {Vector3.new(-251.023392, 256.34906, 337.518616), "walk"},
+ {Vector3.new(-251.023392, 256.34906, 337.518616), "circle"},
  {Vector3.new(-279.103119, 256.34906, 335.235107), "grab"},
 }
--- Lo que se repite cada ciclo: solo los circulos (11-13), el punto 14 y el grab final (15)
+-- Lo que se repite cada ciclo: los circulos (11-14) y el grab final (15)
 local FC_LOOP_START = 11
+local FC_STAY_MAX = 120
 
 local function fcGetChar()
  local char = r.Character
@@ -2591,6 +2592,25 @@ local function fcIsBlueCircleNear(pos)
  return false
 end
 
+local function fcStayAtCircle(pos)
+ local t0 = os.clock()
+ while FarmCookingRunning and os.clock() - t0 < FC_STAY_MAX do
+ if not fcIsBlueCircleNear(pos) then return true end
+ pcall(function()
+ local _, hum, hrp = fcGetChar()
+ if hum and hrp then
+ if (Vector3.new(pos.X, hrp.Position.Y, pos.Z) - hrp.Position).Magnitude > FC_REACH then
+ hum:MoveTo(pos)
+ else
+ hum:MoveTo(hrp.Position)
+ end
+ end
+ end)
+ task.wait(0.5)
+ end
+ return (not FarmCookingRunning) or (not fcIsBlueCircleNear(pos))
+end
+
 local function fcFindPrompt(pos, radius)
  local best, bestD
  for _, obj in ipairs(workspace:GetDescendants()) do
@@ -2662,6 +2682,9 @@ local function farmCookingLoop()
  if action == "circle" then
  if fcIsBlueCircleNear(wp[1]) then
  fcWalkTo(wp[1])
+ if FarmCookingRunning then
+ fcStayAtCircle(wp[1])
+ end
  task.wait(0.3)
  end
  else
@@ -2691,7 +2714,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Ruta automatica: camina, agarra con E y solo va a los circulos azules. Los circulos se repiten cada ciclo.",
+ Desc = "Ruta automatica: camina, agarra con E. En los circulos azules se queda hasta que desaparezcan y luego va a agarrar.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
