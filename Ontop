@@ -1217,7 +1217,7 @@ local function createESP(aG)
  local maxDist = 500
  local distClamped = math.clamp(aO, 0, maxDist)
  local proximityFactor = 1 - (distClamped / maxDist)
- local baseBright = 0.8
+ local baseBright = 1
  local brightness = baseBright + (1 - baseBright) * proximityFactor
  brightness = math.clamp(brightness, 0, 1)
  tracerLine.Color = Color3.new(brightness, brightness, brightness)
@@ -2484,7 +2484,7 @@ local FC_ROUTE = {
 }
 -- Lo que se repite cada ciclo: los circulos (11-14) y el grab final (15)
 local FC_LOOP_START = 11
-local FC_STAY_MAX = 120
+local FC_STAY_MAX = 90
 
 local function fcGetChar()
  local char = r.Character
@@ -2512,6 +2512,49 @@ local function fcStopMovement()
  end)
 end
 
+local PathfindingService = game:GetService("PathfindingService")
+
+local function fcPathTo(pos)
+ local reached = false
+ pcall(function()
+ local char, hum, hrp = fcGetChar()
+ if not (hum and hrp) then return end
+ local path = PathfindingService:CreateAsync({
+ AgentRadius = 2.5,
+ AgentHeight = 5,
+ AgentCanJump = true,
+ WaypointSpacing = 4
+ })
+ path:ComputeAsync(hrp.Position, pos)
+ if path.Status ~= Enum.PathStatus.Success then return end
+ for _, wp in ipairs(path:GetWaypoints()) do
+ if not FarmCookingRunning then return end
+ local c2, h2 = fcGetChar()
+ if not c2 then return end
+ if wp.Action == Enum.PathWaypointAction.Jump then
+ pcall(function() h2.Jump = true end)
+ end
+ pcall(function() h2:MoveTo(wp.Position) end)
+ local t0 = os.clock()
+ while FarmCookingRunning and os.clock() - t0 < 4 do
+ task.wait(0.15)
+ local _, _, p3 = fcGetChar()
+ if not p3 then return end
+ local flatWp = Vector3.new(wp.Position.X, p3.Position.Y, wp.Position.Z)
+ if (flatWp - p3.Position).Magnitude <= 3.5 then break end
+ end
+ end
+ local _, _, p5 = fcGetChar()
+ if p5 then
+ local flatEnd = Vector3.new(pos.X, p5.Position.Y, pos.Z)
+ if (flatEnd - p5.Position).Magnitude <= FC_REACH + 2 then
+ reached = true
+ end
+ end
+ end)
+ return reached
+end
+
 local function fcWalkTo(pos)
  local target = pos
  local attempts = 0
@@ -2526,10 +2569,15 @@ local function fcWalkTo(pos)
  if (flat - hrp.Position).Magnitude <= FC_REACH then return true end
  attempts = attempts + 1
  if attempts > 2 then return false end
+ if attempts == 2 then
+ if fcPathTo(target) then return true end
+ return false
+ end
  local timeout = math.clamp((flat - hrp.Position).Magnitude / 6 + 6, 8, 45)
  local t0 = os.clock()
  local lastPos = hrp.Position
  local stuckT = 0
+ local totalStuck = 0
  pcall(function() hum:MoveTo(target) end)
  while FarmCookingRunning and os.clock() - t0 < timeout do
  task.wait(0.2)
@@ -2539,7 +2587,9 @@ local function fcWalkTo(pos)
  if (flat - hrp.Position).Magnitude <= FC_REACH then return true end
  if (hrp.Position - lastPos).Magnitude < 0.6 then
  stuckT = stuckT + 0.2
+ totalStuck = totalStuck + 0.2
  if stuckT >= 1 then pcall(function() hum.Jump = true end) stuckT = 0 end
+ if totalStuck > 6 then return false end
  else
  stuckT = 0
  end
@@ -2566,49 +2616,55 @@ local function fcGuiHasBlue(obj)
  return false
 end
 
-local function fcIsBlueCircleNear(pos)
+local function fcFindBlueCircle(pos)
  local ok, parts = pcall(function()
  return workspace:GetPartBoundsInRadius(pos, FC_BLUE_RADIUS)
  end)
  if ok and parts then
+ local best, bestD
  for _, part in ipairs(parts) do
  if part:IsA("BasePart") and part.Transparency < 0.95 then
  local mdl = part:FindFirstAncestorOfClass("Model")
  local isChar = mdl and a:GetPlayerFromCharacter(mdl)
  if not isChar then
- if fcBlueDominant(part.Color) then return true end
- for _, ch in ipairs(part:GetChildren()) do
- if (ch:IsA("Decal") or ch:IsA("Texture")) and fcBlueDominant(ch.Color) then return true end
+ local blue = false
+ if fcBlueDominant(part.Color) then
+ blue = true
  end
+ if not blue then
+ for _, ch in ipairs(part:GetChildren()) do
+ if (ch:IsA("Decal") or ch:IsA("Texture")) and fcBlueDominant(ch.Color) then
+ blue = true
+ break
+ end
+ end
+ end
+ if not blue then
  for _, ch in ipairs(part:GetChildren()) do
  if ch:IsA("BillboardGui") or ch:IsA("SurfaceGui") then
- if fcGuiHasBlue(ch) then return true end
+ if fcGuiHasBlue(ch) then
+ blue = true
+ break
+ end
+ end
+ end
+ end
+ if blue then
+ local d = (part.Position - pos).Magnitude
+ if not bestD or d < bestD then
+ best, bestD = part, d
  end
  end
  end
  end
  end
+ return best
  end
- return false
+ return nil
 end
 
-local function fcStayAtCircle(pos)
- local t0 = os.clock()
- while FarmCookingRunning and os.clock() - t0 < FC_STAY_MAX do
- if not fcIsBlueCircleNear(pos) then return true end
- pcall(function()
- local _, hum, hrp = fcGetChar()
- if hum and hrp then
- if (Vector3.new(pos.X, hrp.Position.Y, pos.Z) - hrp.Position).Magnitude > FC_REACH then
- hum:MoveTo(pos)
- else
- hum:MoveTo(hrp.Position)
- end
- end
- end)
- task.wait(0.5)
- end
- return (not FarmCookingRunning) or (not fcIsBlueCircleNear(pos))
+local function fcIsBlueCircleNear(pos)
+ return fcFindBlueCircle(pos) ~= nil
 end
 
 local function fcFindPrompt(pos, radius)
@@ -2671,6 +2727,35 @@ local function fcPressE(pos)
  task.wait(0.45)
 end
 
+local function fcStayAtCircle(pos, circlePart)
+ local t0 = os.clock()
+ local lastE = 0
+ while FarmCookingRunning and os.clock() - t0 < FC_STAY_MAX do
+ if not circlePart or not circlePart.Parent or not circlePart:IsDescendantOf(workspace) then
+ return true
+ end
+ if (circlePart.Position - pos).Magnitude > 40 then
+ return true
+ end
+ pcall(function()
+ local _, hum, hrp = fcGetChar()
+ if hum and hrp then
+ hum:MoveTo(Vector3.new(circlePart.Position.X, hrp.Position.Y, circlePart.Position.Z))
+ end
+ end)
+ if os.clock() - lastE > 4 then
+ lastE = os.clock()
+ if fcFindPrompt(circlePart.Position, 10) then
+ fcPressE(circlePart.Position)
+ else
+ fcTapE()
+ end
+ end
+ task.wait(0.5)
+ end
+ return (not FarmCookingRunning)
+end
+
 local function farmCookingLoop()
  local firstPass = true
  while FarmCookingRunning do
@@ -2680,10 +2765,11 @@ local function farmCookingLoop()
  local wp = FC_ROUTE[idx]
  local action = wp[2]
  if action == "circle" then
- if fcIsBlueCircleNear(wp[1]) then
+ local circ = fcFindBlueCircle(wp[1])
+ if circ then
  fcWalkTo(wp[1])
  if FarmCookingRunning then
- fcStayAtCircle(wp[1])
+ fcStayAtCircle(wp[1], circ)
  end
  task.wait(0.3)
  end
