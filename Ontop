@@ -376,7 +376,6 @@ local ae = 1
 local af = 0.4
 local ag = false
 local ah
-local FC_UI = {} -- referencias a los toggles de combate (para que el farm pueda activarlos y sincronizarlos)
 
 local ai = getgenv or function() return _G end
 ai().Sky = false
@@ -2470,18 +2469,9 @@ local FC_REACH = 3
 local FC_TWEEN_SPEED = 30 -- velocidad del movimiento del farm (studs por segundo, estilo MM2) - sube o baja aqui
 local FC_CIRCLE_WAIT = 12 -- segundos que espera en cada circulo azul antes de ir a agarrar con E
 local FC_CLICK_WAIT = 3 -- segundos de espera en el punto 6 antes de hacer click en el medio
-local FC_CLICK_OFFSET_Y = 40 -- PUNTO 6: pixeles hacia ABAJO donde hace el click (un poco abajo)
-local FC_CIRCLE_CLICK_AT = 10 -- segundos dentro del circulo para hacer el click
-local FC_CIRCLE_CLICK_OFFSET_Y = 110 -- CIRCULO: pixeles hacia ABAJO del click (igual que el punto 6 pero mas abajo)
-local FC_COMBAT_AT = 2 -- segundos dentro del circulo para presionar 1 (PC) y activar melee aura + auto attack + anti kill
-local FC_TP_DISTANCE = 10 -- studs de salto brusco para considerar TP y pausar el farm
-local FC_TP_PAUSE = 4 -- segundos que el farm queda pausado al detectar un TP
-local FC_CIRCLE_LOCK_DIST = 1.2 -- si esta a menos de esto del centro del circulo, queda clavado ahi
-local FC_CIRCLE_MAX_DRIFT = 4 -- si se aleja mas de esto del centro, el iman lo regresa al circulo
-local FC_TRAIL_SPACING = 2.5 -- puntos azules del rastro: uno cada X studs pisados
-local FC_TRAIL_LIFE = 20 -- segundos de vida de cada punto del rastro
-local FC_PointsEnabled = true -- puntos azules: marcadores de ruta + rastro + objetivo
--- Ruta: action = "walk" | "grab" (presiona E) | "circle" (va SOLO si hay circulo azul real - ignora botes de basura - espera 12s) | "click" (punto 6: espera 3s y click en el medio)
+local FC_CIRCLE_CLICK_AT = 10 -- segundo (dentro de la espera del circulo) en que hace el click
+local FC_CLICK_DOWN_Y = 0.7 -- altura del click en el circulo: 0.5 = centro de pantalla, 0.7 = centro pero abajo
+-- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo circulo azul real; espera 12s, click al segundo 10 centro-abajo, si desaparece antes sale YA a la E) | "click" (punto 6: 3s + click centro)
 local FC_ROUTE = {
  {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
  {Vector3.new(-226.22644, 255.099686, 326.575897), "walk"},
@@ -2502,43 +2492,6 @@ local FC_ROUTE = {
 -- Ciclo: circulo (espera 12s) -> coordenada de la E (agarra) -> circulo -> asi repite. El punto 6 espera 3s y hace click en el medio
 local FC_LOOP_START = 11
 
--- ==== ESTADO INTERNO: PAUSA POR TP / PUNTOS AZULES / COMBATE ====
-local FC_PauseUntil = 0 -- timestamp real hasta el que el farm esta pausado (TP detectado)
-local FC_PauseStart = nil -- inicio de la pausa actual (para congelar el reloj del farm)
-local FC_PauseTotal = 0 -- tiempo total pausado (se descuenta de los timeouts del farm)
-local FC_TP_Suppress = false -- suprime la deteccion de TP en teleports propios / respawn
-local FC_LastPos = nil -- ultima posicion del character para detectar TP
-local FC_LastCheck = 0
-local FC_LastTrailPos = nil
-local FC_TrailDots = {}
-local FC_Markers = {}
-local FC_TargetMarker = nil
-local FC_AutoCombatActive = false
-local FC_CombatPrev = nil
-
-local fcPointsFolder = workspace:FindFirstChild("YupiFarmPoints")
-if not fcPointsFolder then
- fcPointsFolder = Instance.new("Folder")
- fcPointsFolder.Name = "YupiFarmPoints"
- fcPointsFolder.Parent = workspace
-end
-
--- Reloj del farm: se congela mientras el farm esta pausado por un TP
-local function fcIsPaused()
- return os.clock() < FC_PauseUntil
-end
-
-local function fcClock()
- local frozen = FC_PauseStart and (os.clock() - FC_PauseStart) or 0
- return os.clock() - FC_PauseTotal - frozen
-end
-
-local function fcWaitPause()
- while FarmCookingRunning and os.clock() < FC_PauseUntil do
- task.wait(0.1)
- end
-end
-
 local function fcGetChar()
  local char = r.Character
  if not char then return nil end
@@ -2556,124 +2509,6 @@ local function fcWaitChar()
  task.wait(0.25)
  end
  return fcGetChar()
-end
-
--- ==== PUNTOS AZULES: marcadores de ruta + rastro de donde pisa + punto del objetivo ====
-local function fcClearPoints()
- pcall(function()
- if fcPointsFolder then fcPointsFolder:ClearAllChildren() end
- end)
- FC_TargetMarker = nil
- FC_TrailDots = {}
- FC_Markers = {}
- FC_LastTrailPos = nil
-end
-
-local function fcSpawnRouteMarkers()
- if not FC_PointsEnabled then return end
- for i, wp in ipairs(FC_ROUTE) do
- pcall(function()
- local m = Instance.new("Part")
- m.Shape = Enum.PartType.Ball
- m.Size = Vector3.new(0.8, 0.8, 0.8)
- m.Color = Color3.fromRGB(0, 130, 255)
- m.Material = Enum.Material.Neon
- m.Anchored = true
- m.CanCollide = false
- m.CanQuery = false
- m.CanTouch = false
- m.CastShadow = false
- m.Position = wp[1] + Vector3.new(0, 1.1, 0)
- m.Parent = fcPointsFolder
- local bb = Instance.new("BillboardGui")
- bb.Size = UDim2.new(0, 100, 0, 26)
- bb.StudsOffset = Vector3.new(0, 1.7, 0)
- bb.AlwaysOnTop = true
- bb.MaxDistance = 250
- bb.Parent = m
- local tl = Instance.new("TextLabel")
- tl.Size = UDim2.fromScale(1, 1)
- tl.BackgroundTransparency = 1
- tl.Text = i .. " - " .. tostring(wp[2])
- tl.TextColor3 = Color3.fromRGB(170, 215, 255)
- tl.TextStrokeTransparency = 0.35
- tl.TextScaled = true
- tl.Font = Enum.Font.GothamBold
- tl.Parent = bb
- table.insert(FC_Markers, m)
- end)
- end
-end
-
-local function fcSpawnTrailDot(pos)
- if not FC_PointsEnabled or not fcPointsFolder then return end
- pcall(function()
- local groundY = pos.Y - 2.8
- local _, _, hrp = fcGetChar()
- if hrp then
- local rp = RaycastParams.new()
- rp.FilterDescendantsInstances = {hrp.Parent, fcPointsFolder}
- rp.FilterType = Enum.RaycastFilterType.Exclude
- local hit = workspace:Raycast(pos, Vector3.new(0, -10, 0), rp)
- if hit then groundY = hit.Position.Y + 0.25 end
- end
- local dot = Instance.new("Part")
- dot.Shape = Enum.PartType.Ball
- dot.Size = Vector3.new(0.45, 0.45, 0.45)
- dot.Color = Color3.fromRGB(60, 160, 255)
- dot.Material = Enum.Material.Neon
- dot.Anchored = true
- dot.CanCollide = false
- dot.CanQuery = false
- dot.CanTouch = false
- dot.CastShadow = false
- dot.Position = Vector3.new(pos.X, groundY, pos.Z)
- dot.Parent = fcPointsFolder
- table.insert(FC_TrailDots, dot)
- if #FC_TrailDots > 250 then
- local old = table.remove(FC_TrailDots, 1)
- if old then pcall(function() old:Destroy() end) end
- end
- f:AddItem(dot, FC_TRAIL_LIFE)
- end)
-end
-
-local function fcSetTarget(pos)
- if not FC_PointsEnabled or not fcPointsFolder then return end
- pcall(function()
- if not FC_TargetMarker or not FC_TargetMarker.Parent then
- local m = Instance.new("Part")
- m.Shape = Enum.PartType.Ball
- m.Size = Vector3.new(1.6, 1.6, 1.6)
- m.Color = Color3.fromRGB(0, 200, 255)
- m.Material = Enum.Material.Neon
- m.Transparency = 0.45
- m.Anchored = true
- m.CanCollide = false
- m.CanQuery = false
- m.CanTouch = false
- m.CastShadow = false
- m.Position = pos + Vector3.new(0, 1.2, 0)
- m.Parent = fcPointsFolder
- local bb = Instance.new("BillboardGui")
- bb.Size = UDim2.new(0, 110, 0, 24)
- bb.StudsOffset = Vector3.new(0, 2, 0)
- bb.AlwaysOnTop = true
- bb.MaxDistance = 250
- bb.Parent = m
- local tl = Instance.new("TextLabel")
- tl.Size = UDim2.fromScale(1, 1)
- tl.BackgroundTransparency = 1
- tl.Text = "OBJETIVO"
- tl.TextColor3 = Color3.fromRGB(140, 235, 255)
- tl.TextStrokeTransparency = 0.35
- tl.TextScaled = true
- tl.Font = Enum.Font.GothamBold
- tl.Parent = bb
- FC_TargetMarker = m
- end
- FC_TargetMarker.Position = pos + Vector3.new(0, 1.2, 0)
- end)
 end
 
 local function fcStopMovement()
@@ -2705,17 +2540,15 @@ local function fcPathTo(pos)
  if path.Status ~= Enum.PathStatus.Success then return end
  for _, wp in ipairs(path:GetWaypoints()) do
  if not FarmCookingRunning then return end
- fcWaitPause()
  local c2, h2 = fcGetChar()
  if not c2 then return end
  if wp.Action == Enum.PathWaypointAction.Jump then
  pcall(function() h2.Jump = true end)
  end
  pcall(function() h2:MoveTo(wp.Position) end)
- local t0 = fcClock()
- while FarmCookingRunning and fcClock() - t0 < 4 do
+ local t0 = os.clock()
+ while FarmCookingRunning and os.clock() - t0 < 4 do
  task.wait(0.15)
- if fcIsPaused() then fcWaitPause() end
  local _, _, p3 = fcGetChar()
  if not p3 then return end
  local flatWp = Vector3.new(wp.Position.X, p3.Position.Y, wp.Position.Z)
@@ -2737,7 +2570,6 @@ local function fcWalkTo(pos)
  local target = pos
  local attempts = 0
  while FarmCookingRunning do
- fcWaitPause()
  local char, hum, hrp = fcGetChar()
  if not char then
  fcWaitChar()
@@ -2753,19 +2585,13 @@ local function fcWalkTo(pos)
  return false
  end
  local timeout = math.clamp((flat - hrp.Position).Magnitude / 6 + 6, 8, 45)
- local t0 = fcClock()
+ local t0 = os.clock()
  local lastPos = hrp.Position
  local stuckT = 0
  local totalStuck = 0
  pcall(function() hum:MoveTo(target) end)
- while FarmCookingRunning and fcClock() - t0 < timeout do
+ while FarmCookingRunning and os.clock() - t0 < timeout do
  task.wait(0.2)
- if fcIsPaused() then
- fcWaitPause()
- char, hum, hrp = fcGetChar()
- if not char then break end
- lastPos = hrp.Position
- else
  char, hum, hrp = fcGetChar()
  if not char then break end
  flat = Vector3.new(target.X, hrp.Position.Y, target.Z)
@@ -2782,12 +2608,10 @@ local function fcWalkTo(pos)
  pcall(function() hum:MoveTo(target) end)
  end
  end
- end
  return false
 end
 
 -- Movimiento del farm con Tween (glide suave, estilo MM2) en vez de caminar
--- Si detecta un TP y el farm se pausa, cancela el tween y luego re-tweenea desde donde quedo
 local function fcTweenTo(pos)
  local char, hum, hrp = fcGetChar()
  if not (char and hum and hrp) then
@@ -2795,22 +2619,12 @@ local function fcTweenTo(pos)
  char, hum, hrp = fcGetChar()
  if not (char and hum and hrp) then return false end
  end
- local reached = false
- local ok = pcall(function()
- while FarmCookingRunning do
- fcWaitPause()
- char, hum, hrp = fcGetChar()
- if not (char and hum and hrp) then return end
- local flatNow = Vector3.new(pos.X, hrp.Position.Y, pos.Z)
- if (flatNow - hrp.Position).Magnitude <= FC_REACH + 1 then
- reached = true
- return
- end
- local rot = hrp.CFrame - hrp.CFrame.Position
  local distancia = (Vector3.new(pos.X, pos.Y, pos.Z) - hrp.Position).Magnitude
  local duracion = math.max(distancia / math.max(FC_TWEEN_SPEED, 1), 0.1)
  local done = false
  local tween
+ local ok = pcall(function()
+ local rot = hrp.CFrame - hrp.CFrame.Position
  tween = fcTweenService:Create(
  hrp,
  TweenInfo.new(duracion, Enum.EasingStyle.Linear),
@@ -2821,19 +2635,11 @@ local function fcTweenTo(pos)
  end)
  FC_CurrentTween = tween
  tween:Play()
- local t0 = fcClock()
- while not done and fcClock() - t0 < duracion + 1 do
+ local t0 = os.clock()
+ while not done and os.clock() - t0 < duracion + 1 do
  if not FarmCookingRunning or not fcGetChar() then
  pcall(function() tween:Cancel() end)
- FC_CurrentTween = nil
- conn:Disconnect()
- return
- end
- if fcIsPaused() then
- pcall(function() tween:Cancel() end)
- FC_CurrentTween = nil
- conn:Disconnect()
- break -- espera la pausa y re-tweenea desde la posicion actual
+ break
  end
  task.wait(0.05)
  end
@@ -2841,25 +2647,21 @@ local function fcTweenTo(pos)
  pcall(function() tween:Cancel() end)
  end
  conn:Disconnect()
- FC_CurrentTween = nil
- if FarmCookingRunning then task.wait(0.05) end
- end
  end)
  FC_CurrentTween = nil
  if not ok then return false end
- if reached then return true end
  local c2, _, p2 = fcGetChar()
  if not c2 then return false end
  local flat = Vector3.new(pos.X, p2.Position.Y, pos.Z)
  return (flat - p2.Position).Magnitude <= FC_REACH + 1
 end
 
--- Click con offset vertical en pantalla: 0 = centro exacto, positivo = mas ABAJO
-local function fcClickAt(offsetY)
+-- Click con VirtualInputManager (mismo metodo que el auto ATM del script); yFactor 0.5 = centro, 0.7 = centro pero abajo
+local function fcClickAt(yFactor)
  local ok = pcall(function()
  local cam = workspace.CurrentCamera
  local x = cam.ViewportSize.X / 2
- local y = cam.ViewportSize.Y / 2 + (tonumber(offsetY) or 0)
+ local y = cam.ViewportSize.Y * yFactor
  VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
  task.wait(0.05)
  VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
@@ -2868,7 +2670,7 @@ local function fcClickAt(offsetY)
  pcall(function()
  if type(mousemoveabs) == "function" then
  local cam = workspace.CurrentCamera
- mousemoveabs(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2 + (tonumber(offsetY) or 0))
+ mousemoveabs(cam.ViewportSize.X / 2, cam.ViewportSize.Y * yFactor)
  end
  mouse1click()
  end)
@@ -2876,8 +2678,7 @@ local function fcClickAt(offsetY)
 end
 
 local function fcClickCenter()
- -- PUNTO 6: click un poco abajo del centro (ajustable con el slider)
- fcClickAt(FC_CLICK_OFFSET_Y)
+ fcClickAt(0.5)
 end
 
 local function fcBlueDominant(c)
@@ -2933,9 +2734,9 @@ local function fcIsTrashObject(part)
  return false
 end
 
-local function fcFindBlueCircleInRadius(pos, radius)
+local function fcFindBlueCircle(pos)
  local ok, parts = pcall(function()
- return workspace:GetPartBoundsInRadius(pos, radius)
+ return workspace:GetPartBoundsInRadius(pos, FC_BLUE_RADIUS)
  end)
  if ok and parts then
  local best, bestScore
@@ -2948,8 +2749,6 @@ local function fcFindBlueCircleInRadius(pos, radius)
  local footprint = math.max(sX, sZ)
  local isStanding = sY > footprint * 1.15 and sY > 1.8
  if not isStanding then
- local flatD = (Vector3.new(part.Position.X, pos.Y, part.Position.Z) - pos).Magnitude
- if flatD <= radius then
  local blue = false
  if fcBlueDominant(part.Color) then
  blue = true
@@ -2984,15 +2783,9 @@ local function fcFindBlueCircleInRadius(pos, radius)
  end
  end
  end
- end
  return best
  end
  return nil
-end
-
-local function fcFindBlueCircle(pos)
- -- primero el radio normal; si no encuentra, amplia la busqueda (el circulo puede estar un poco off del punto de ruta)
- return fcFindBlueCircleInRadius(pos, FC_BLUE_RADIUS) or fcFindBlueCircleInRadius(pos, 25)
 end
 
 local function fcIsBlueCircleNear(pos)
@@ -3059,267 +2852,67 @@ local function fcPressE(pos)
  task.wait(0.45)
 end
 
--- ==== TECLA 1 (PC) + COMBATE AUTOMATICO: melee aura + auto attack + anti kill ====
-local function fcPressOne()
- local ok = pcall(function()
- VIM:SendKeyEvent(true, Enum.KeyCode.One, false, game)
- task.wait(0.08)
- VIM:SendKeyEvent(false, Enum.KeyCode.One, false, game)
- end)
- if not ok then
- pcall(function()
- local char = r.Character
- local bp = r:FindFirstChild("Backpack")
- local hum = char and char:FindFirstChildOfClass("Humanoid")
- if not (bp and hum) then return end
- for _, tool in ipairs(bp:GetChildren()) do
- if tool:IsA("Tool") and (tool.Name == "Fists" or (q and q:FindFirstChild(tool.Name))) then
- hum:EquipTool(tool)
- break
- end
- end
- end)
- end
-end
-
-local function fcSyncCombatUI()
- pcall(function()
- if FC_UI.MeleeAura and FC_UI.MeleeAura.Set then FC_UI.MeleeAura:Set(ay) end
- end)
- pcall(function()
- if FC_UI.AutoAttack and FC_UI.AutoAttack.Set then FC_UI.AutoAttack:Set(ab) end
- end)
- pcall(function()
- if FC_UI.AntiKill and FC_UI.AntiKill.Set then FC_UI.AntiKill:Set(_antiKill.enabled) end
- end)
-end
-
-local function fcActivateCombat()
- FC_AutoCombatActive = true
- FC_CombatPrev = {ay = ay and true or false, ab = ab and true or false, ak = _antiKill.enabled and true or false}
- fcPressOne()
- task.wait(0.15)
- ay = true -- Melee Aura (WideFists)
- ab = true -- Auto Attack (melee aura auto attack)
- _antiKill.enabled = true -- Anti Kill
- fcSyncCombatUI()
- if A then
- pcall(function()
- A:Notify({Title = "Combate Auto ON", Description = "Tecla 1 + Melee Aura + Auto Attack + Anti Kill", Duration = 2})
- end)
- end
-end
-
-local function fcEnsureCombat()
- if FC_AutoCombatActive then
- fcPressOne() -- ya activo: solo re-equipa el slot 1 por si se des-equipó
- return
- end
- fcActivateCombat()
-end
-
-local function fcDeactivateCombat()
- if not FC_AutoCombatActive then return end
- FC_AutoCombatActive = false
- local prev = FC_CombatPrev or {ay = false, ab = false, ak = false}
- ay = prev.ay and true or false
- ab = prev.ab and true or false
- _antiKill.enabled = prev.ak and true or false
- fcSyncCombatUI()
- FC_CombatPrev = nil
-end
-
--- ==== DETECTOR DE TP: si el character salta FC_TP_DISTANCE studs de golpe, pausa el farm ====
-b.Heartbeat:Connect(function()
- if not FarmCookingRunning or FC_TP_Suppress then
- FC_LastPos = nil
- return
- end
- local now = os.clock()
- local _, _, hrp = fcGetChar()
- if not hrp then
- FC_LastPos = nil
- return
- end
- local p = hrp.Position
- if not FC_LastPos then
- FC_LastPos = p
- FC_LastCheck = now
- return
- end
- local dt = now - FC_LastCheck
- if dt <= 0 then return end
- local d = (p - FC_LastPos).Magnitude
- local speedNeed = math.max(45, FC_TWEEN_SPEED * 1.6)
- if d > FC_TP_DISTANCE and (d / dt) > speedNeed and not fcIsPaused() then
- FC_PauseUntil = now + FC_TP_PAUSE
- FC_PauseStart = now
- FC_LastPos = nil
- fcStopMovement()
- if A then
- pcall(function()
- A:Notify({
- Title = "Pause Farm",
- Description = string.format("TP detectado (%.0f studs). Se reanuda en %d s", d, FC_TP_PAUSE),
- Duration = 4,
- })
- end)
- end
- else
- FC_LastPos = p
- FC_LastCheck = now
- end
-end)
-
--- Reanuda el farm cuando termina la pausa del TP
-task.spawn(function()
- while true do
- task.wait(0.1)
- if FarmCookingRunning and FC_PauseStart and os.clock() >= FC_PauseUntil then
- FC_PauseTotal = FC_PauseTotal + (os.clock() - FC_PauseStart)
- FC_PauseStart = nil
- FC_LastPos = nil
- if A then
- pcall(function()
- A:Notify({Title = "Farm reanudado", Description = "Siguiendo la ruta", Duration = 2})
- end)
- end
- end
- end
-end)
-
--- Espera EN el circulo: iman al centro REAL del circulo (no drift), combate a los 2s, click a los 10s
+-- Espera en el circulo: mantiene posicion; si el circulo desaparece antes de tiempo SALE YA y sigue hacia la E sin buguearse;
+-- al pasar 10 segundos en el circulo hace UN click en el centro pero abajo
 local function fcStayAtCircle(pos, segundos)
- local t0 = fcClock()
- local combatDone = false
- local clickDone = false
- local center = pos
- local lastRefind = -10
- while FarmCookingRunning do
- fcWaitPause()
- local elapsed = fcClock() - t0
- if elapsed >= segundos then break end
- local char, hum, hrp = fcGetChar()
- if char then
- -- re-localiza el circulo azul real cada 1s (por si se mueve o el punto de ruta queda off)
- if fcClock() - lastRefind >= 1 then
- lastRefind = fcClock()
- local c2 = fcFindBlueCircle(pos) or fcFindBlueCircle(hrp.Position)
- if c2 then
- center = Vector3.new(c2.Position.X, pos.Y, c2.Position.Z)
- end
- end
- fcSetTarget(center)
- local flatC = Vector3.new(center.X, hrp.Position.Y, center.Z)
- local d = (flatC - hrp.Position).Magnitude
- local busy = false
- pcall(function()
- busy = (isDowned() and true) or (_antiKill.enabled and _antiKill.snap.pos ~= nil and true) or false
- end)
- if not busy then
- if d > FC_CIRCLE_MAX_DRIFT then
- -- se salio del circulo: el iman lo regresa al centro
- pcall(function() hum:MoveTo(flatC) end)
- if d > FC_CIRCLE_MAX_DRIFT + 2 then
- fcTweenTo(Vector3.new(center.X, hrp.Position.Y, center.Z))
- end
- elseif d > FC_CIRCLE_LOCK_DIST then
- pcall(function() hum:MoveTo(flatC) end)
+ local t0 = os.clock()
+ local clicked = false
+ local goneT = 0
+ while FarmCookingRunning and os.clock() - t0 < segundos do
+ local elapsed = os.clock() - t0
+ -- circulo desaparecido: confirmar 0.75s seguidos sin circulo para no buguearse con parpadeos/animaciones
+ if fcFindBlueCircle(pos) then
+ goneT = 0
  else
- -- clavado en el centro del circulo
+ goneT = goneT + 0.25
+ if goneT >= 0.75 then
+ return true
+ end
+ end
+ -- mantener la posicion sobre el circulo
  pcall(function()
- hrp.CFrame = CFrame.new(flatC) * (hrp.CFrame - hrp.CFrame.Position)
+ local _, hum, hrp = fcGetChar()
+ if hum and hrp then
+ hum:MoveTo(Vector3.new(pos.X, hrp.Position.Y, pos.Z))
+ end
  end)
- pcall(function() hum:MoveTo(flatC) end)
+ -- click centro-abajo al pasar los 10 segundos
+ if not clicked and elapsed >= FC_CIRCLE_CLICK_AT then
+ clicked = true
+ fcClickAt(FC_CLICK_DOWN_Y)
  end
- end
- -- a los 2s: presiona 1 (PC) y activa melee aura + auto attack + anti kill
- if not combatDone and elapsed >= FC_COMBAT_AT then
- combatDone = true
- fcEnsureCombat()
- end
- -- a los 10s: click tipo punto 6 pero mas abajo
- if not clickDone and (elapsed >= FC_CIRCLE_CLICK_AT or (segundos - elapsed) <= 0.3) then
- clickDone = true
- fcClickAt(FC_CIRCLE_CLICK_OFFSET_Y)
- end
- else
- fcWaitChar()
- end
- task.wait(0.15)
+ task.wait(0.25)
  end
  return FarmCookingRunning
 end
 
 local function farmCookingLoop()
- -- rastro azul: puntos donde el farm va pisando
- task.spawn(function()
- while FarmCookingRunning do
- task.wait(0.12)
- if FC_PointsEnabled then
- local _, _, hrp = fcGetChar()
- if hrp then
- local p = hrp.Position
- if not FC_LastTrailPos then
- FC_LastTrailPos = p
- else
- local flatD = (Vector3.new(p.X, 0, p.Z) - Vector3.new(FC_LastTrailPos.X, 0, FC_LastTrailPos.Z)).Magnitude
- if flatD >= FC_TRAIL_SPACING then
- FC_LastTrailPos = p
- fcSpawnTrailDot(p)
- end
- end
- else
- FC_LastTrailPos = nil
- end
- end
- end
- end)
  local firstPass = true
  while FarmCookingRunning do
- fcWaitPause()
  local startIdx = firstPass and 1 or FC_LOOP_START
  for idx = startIdx, #FC_ROUTE do
  if not FarmCookingRunning then break end
- fcWaitPause()
  local wp = FC_ROUTE[idx]
  local action = wp[2]
- fcSetTarget(wp[1])
  if action == "circle" then
  local circ = fcFindBlueCircle(wp[1])
- local cpos = wp[1]
  if circ then
- -- X/Z del centro real del circulo, Y de ruta (altura buena conocida)
- cpos = Vector3.new(circ.Position.X, wp[1].Y, circ.Position.Z)
- end
- fcSetTarget(cpos)
+ local cpos = circ.Position
  if not fcTweenTo(cpos) then
  fcWalkTo(wp[1])
  end
- -- correccion final: quedar clavado en el centro real del circulo
  if FarmCookingRunning then
- local _, _, hrp2 = fcGetChar()
- if hrp2 then
- local flatC = Vector3.new(cpos.X, hrp2.Position.Y, cpos.Z)
- if (flatC - hrp2.Position).Magnitude > FC_CIRCLE_LOCK_DIST then
- fcTweenTo(Vector3.new(cpos.X, hrp2.Position.Y, cpos.Z))
- end
- end
- end
- if FarmCookingRunning then
- fcStayAtCircle(cpos, FC_CIRCLE_WAIT)
+ fcStayAtCircle(wp[1], FC_CIRCLE_WAIT)
  end
  task.wait(0.3)
+ end
  else
  if firstPass and idx == 1 then
  pcall(function()
  local _, _, hrp0 = fcGetChar()
  if hrp0 and (wp[1] - hrp0.Position).Magnitude > 50 then
- FC_TP_Suppress = true
  hrp0.CFrame = CFrame.new(wp[1] + Vector3.new(0, 4, 0))
- task.wait(0.6)
- FC_TP_Suppress = false
- FC_LastPos = nil
+ task.wait(0.5)
  end
  end)
  end
@@ -3330,20 +2923,14 @@ local function farmCookingLoop()
  fcPressE(wp[1])
  end
  if action == "click" and FarmCookingRunning then
- local t0c = fcClock()
- while FarmCookingRunning and fcClock() - t0c < FC_CLICK_WAIT do
- fcWaitPause()
- task.wait(0.1)
- end
- if FarmCookingRunning then
+ task.wait(FC_CLICK_WAIT)
  fcClickCenter()
  end
  end
  end
- end
  firstPass = false
- local t0 = fcClock()
- while FarmCookingRunning and fcClock() - t0 < 0.5 do
+ local t0 = os.clock()
+ while FarmCookingRunning and os.clock() - t0 < 0.5 do
  task.wait(0.1)
  end
  end
@@ -3352,134 +2939,22 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Glide tween. Para clavado en el centro del circulo azul (iman anti-drift). A los 2s en el circulo: tecla 1 + Melee Aura + Auto Attack + Anti Kill. A los 10s: click mas abajo. Punto 6: click un poco abajo. Si detecta TP de 10 studs: pausa 4s con notificacion. Puntos azules de ruta + rastro.",
+ Desc = "Tween glide. Circulo: espera 12s (si desaparece antes, va a la E ya), click centro-abajo al segundo 10, luego agarra con E. Punto 6: 3s + click centro. Ignora botes de basura.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
  if v then
- FC_PauseUntil = 0
- FC_PauseStart = nil
- FC_PauseTotal = 0
- FC_LastPos = nil
- FC_LastTrailPos = nil
- FC_AutoCombatActive = false
- FC_CombatPrev = nil
- fcClearPoints()
- fcSpawnRouteMarkers()
  task.spawn(function()
  pcall(farmCookingLoop)
  end)
  if A then A:Notify({Title = "Farm Cooking ON", Duration = 2}) end
  else
  fcStopMovement()
- fcClearPoints()
- fcDeactivateCombat()
  if A then A:Notify({Title = "Farm Cooking OFF", Duration = 2}) end
  end
  end
 })
 D:Register("FarmCooking", fcToggle)
-
--- ==== AJUSTES DEL FARM ====
-aS:Slider({
- Title = "Farm: velocidad glide",
- Desc = "Studs por segundo del movimiento del farm",
- Step = 1,
- Value = {Min = 10, Max = 80, Default = FC_TWEEN_SPEED},
- Callback = function(v)
- FC_TWEEN_SPEED = tonumber(v) or 30
- end
-})
-
-aS:Slider({
- Title = "Circulo: espera (s)",
- Step = 1,
- Value = {Min = 3, Max = 30, Default = FC_CIRCLE_WAIT},
- Callback = function(v)
- FC_CIRCLE_WAIT = tonumber(v) or 12
- end
-})
-
-aS:Slider({
- Title = "Circulo: click a los (s)",
- Desc = "Cuando hace el click abajo estando en el circulo",
- Step = 1,
- Value = {Min = 2, Max = 25, Default = FC_CIRCLE_CLICK_AT},
- Callback = function(v)
- FC_CIRCLE_CLICK_AT = tonumber(v) or 10
- end
-})
-
-aS:Slider({
- Title = "Punto 6: click abajo (px)",
- Desc = "Pixeles por debajo del centro para el click del punto 6",
- Step = 1,
- Value = {Min = 0, Max = 300, Default = FC_CLICK_OFFSET_Y},
- Callback = function(v)
- FC_CLICK_OFFSET_Y = tonumber(v) or 40
- end
-})
-
-aS:Slider({
- Title = "Circulo: click abajo (px)",
- Desc = "Pixeles por debajo del centro para el click en el circulo (mas abajo que el punto 6)",
- Step = 1,
- Value = {Min = 0, Max = 400, Default = FC_CIRCLE_CLICK_OFFSET_Y},
- Callback = function(v)
- FC_CIRCLE_CLICK_OFFSET_Y = tonumber(v) or 110
- end
-})
-
-aS:Slider({
- Title = "TP: pausa si salta (studs)",
- Desc = "Salto brusco mayor a esto = TP detectado, pausa el farm",
- Step = 1,
- Value = {Min = 5, Max = 60, Default = FC_TP_DISTANCE},
- Callback = function(v)
- FC_TP_DISTANCE = tonumber(v) or 10
- end
-})
-
-aS:Slider({
- Title = "TP: segundos de pausa",
- Step = 1,
- Value = {Min = 1, Max = 15, Default = FC_TP_PAUSE},
- Callback = function(v)
- FC_TP_PAUSE = tonumber(v) or 4
- end
-})
-
-aS:Toggle({
- Title = "Puntos Azules (ruta + rastro)",
- Desc = "Marcadores azules en las coordenadas de la ruta, rastro de por donde va pisando y punto del objetivo actual",
- Default = true,
- Callback = function(v)
- FC_PointsEnabled = v
- if not v then
- fcClearPoints()
- elseif FarmCookingRunning then
- fcSpawnRouteMarkers()
- end
- end
-})
-
-aS:Slider({
- Title = "Rastro: punto cada (studs)",
- Step = 0.5,
- Value = {Min = 1, Max = 10, Default = FC_TRAIL_SPACING},
- Callback = function(v)
- FC_TRAIL_SPACING = tonumber(v) or 2.5
- end
-})
-
-aS:Slider({
- Title = "Rastro: vida del punto (s)",
- Step = 1,
- Value = {Min = 3, Max = 120, Default = FC_TRAIL_LIFE},
- Callback = function(v)
- FC_TRAIL_LIFE = tonumber(v) or 20
- end
-})
 
 aS:Section({Title = "COMBAT"})
 
@@ -3547,16 +3022,14 @@ r.CharacterAdded:Connect(function()
  if ay then checkAndModifyFists() end
 end)
 
-local meleeAuraToggle = aS:Toggle({
+D:Register("Fists Modifier", aS:Toggle({
  Title = "Melee Aura",
  Desc = "WideFists",
  Default = false,
  Callback = function(aV)
  ay = aV
  checkAndModifyFists()
- end})
-D:Register("Fists Modifier", meleeAuraToggle)
-FC_UI.MeleeAura = meleeAuraToggle -- el farm puede sincronizar este toggle
+ end}))
 
 local aV = aS:Toggle({
  Title = "Auto Attack",
@@ -3566,7 +3039,6 @@ local aV = aS:Toggle({
  end
 })
 D:Register("AutoAttack_Enabled", aV)
-FC_UI.AutoAttack = aV -- el farm puede sincronizar este toggle
 end
 do
 
@@ -3820,7 +3292,6 @@ local a8 = a1:Toggle({
  end
 })
 D:Register("AntiKill", a8)
-FC_UI.AntiKill = a8 -- el farm puede sincronizar este toggle
 
 pcall(function()
  if a1 and typeof(a1.Divider) == "function" then a1:Divider() end
