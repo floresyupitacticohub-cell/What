@@ -2457,6 +2457,257 @@ aS:Toggle({
  end
 })
 
+aS:Section({Title = "FARM:"})
+
+-- ==================== FARM COOKING ====================
+local VIM = game:GetService("VirtualInputManager")
+local FarmCookingRunning = false
+local FC_BLUE_RADIUS = 10
+local FC_REACH = 3
+-- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo va si hay circulo azul)
+local FC_ROUTE = {
+ {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
+ {Vector3.new(-226.22644, 255.099686, 326.575897), "walk"},
+ {Vector3.new(-229.751602, 255.196243, 328.057007), "walk"},
+ {Vector3.new(-231.653305, 256.348999, 331.004425), "walk"},
+ {Vector3.new(-236.576645, 256.34906, 334.660858), "walk"},
+ {Vector3.new(-234.843475, 256.34906, 337.162415), "walk"},
+ {Vector3.new(-245.602203, 256.34903, 338.568176), "walk"},
+ {Vector3.new(-264.545593, 256.34903, 337.828186), "walk"},
+ {Vector3.new(-272.87912, 256.34903, 338.198273), "walk"},
+ {Vector3.new(-279.073547, 256.34903, 335.607849), "grab"},
+ {Vector3.new(-277.448273, 256.34903, 351.433807), "circle"},
+ {Vector3.new(-266.716278, 256.34906, 337.80896), "circle"},
+ {Vector3.new(-261.974487, 256.34906, 350.103363), "circle"},
+ {Vector3.new(-251.023392, 256.34906, 337.518616), "walk"},
+ {Vector3.new(-279.103119, 256.34906, 335.235107), "grab"},
+}
+-- Lo que se repite cada ciclo: solo los circulos (11-13), el punto 14 y el grab final (15)
+local FC_LOOP_START = 11
+
+local function fcGetChar()
+ local char = r.Character
+ if not char then return nil end
+ local hum = char:FindFirstChildOfClass("Humanoid")
+ local hrp = char:FindFirstChild("HumanoidRootPart")
+ if hum and hum.Health > 0 and hrp then return char, hum, hrp end
+ return nil
+end
+
+local function fcWaitChar()
+ local t0 = os.clock()
+ while FarmCookingRunning and os.clock() - t0 < 25 do
+ local aU, aV, aW = fcGetChar()
+ if aU then return aU, aV, aW end
+ task.wait(0.25)
+ end
+ return fcGetChar()
+end
+
+local function fcStopMovement()
+ pcall(function()
+ local aU, aV, aW = fcGetChar()
+ if aV and aW then aV:MoveTo(aW.Position) end
+ end)
+end
+
+local function fcWalkTo(pos)
+ local target = pos
+ local attempts = 0
+ while FarmCookingRunning do
+ local char, hum, hrp = fcGetChar()
+ if not char then
+ fcWaitChar()
+ char, hum, hrp = fcGetChar()
+ if not char then return false end
+ end
+ local flat = Vector3.new(target.X, hrp.Position.Y, target.Z)
+ if (flat - hrp.Position).Magnitude <= FC_REACH then return true end
+ attempts = attempts + 1
+ if attempts > 2 then return false end
+ local timeout = math.clamp((flat - hrp.Position).Magnitude / 6 + 6, 8, 45)
+ local t0 = os.clock()
+ local lastPos = hrp.Position
+ local stuckT = 0
+ pcall(function() hum:MoveTo(target) end)
+ while FarmCookingRunning and os.clock() - t0 < timeout do
+ task.wait(0.2)
+ char, hum, hrp = fcGetChar()
+ if not char then break end
+ flat = Vector3.new(target.X, hrp.Position.Y, target.Z)
+ if (flat - hrp.Position).Magnitude <= FC_REACH then return true end
+ if (hrp.Position - lastPos).Magnitude < 0.6 then
+ stuckT = stuckT + 0.2
+ if stuckT >= 1 then pcall(function() hum.Jump = true end) stuckT = 0 end
+ else
+ stuckT = 0
+ end
+ lastPos = hrp.Position
+ pcall(function() hum:MoveTo(target) end)
+ end
+ end
+ return false
+end
+
+local function fcBlueDominant(c)
+ return c.B >= 0.35 and c.B > c.R * 1.3 and c.B > c.G * 0.95
+end
+
+local function fcGuiHasBlue(obj)
+ if obj:IsA("Frame") then
+ if fcBlueDominant(obj.BackgroundColor3) then return true end
+ elseif obj:IsA("ImageLabel") then
+ if fcBlueDominant(obj.ImageColor3) then return true end
+ end
+ for _, ch in ipairs(obj:GetChildren()) do
+ if fcGuiHasBlue(ch) then return true end
+ end
+ return false
+end
+
+local function fcIsBlueCircleNear(pos)
+ local ok, parts = pcall(function()
+ return workspace:GetPartBoundsInRadius(pos, FC_BLUE_RADIUS)
+ end)
+ if ok and parts then
+ for _, part in ipairs(parts) do
+ if part:IsA("BasePart") and part.Transparency < 0.95 then
+ local mdl = part:FindFirstAncestorOfClass("Model")
+ local isChar = mdl and a:GetPlayerFromCharacter(mdl)
+ if not isChar then
+ if fcBlueDominant(part.Color) then return true end
+ for _, ch in ipairs(part:GetChildren()) do
+ if (ch:IsA("Decal") or ch:IsA("Texture")) and fcBlueDominant(ch.Color) then return true end
+ end
+ for _, ch in ipairs(part:GetChildren()) do
+ if ch:IsA("BillboardGui") or ch:IsA("SurfaceGui") then
+ if fcGuiHasBlue(ch) then return true end
+ end
+ end
+ end
+ end
+ end
+ end
+ return false
+end
+
+local function fcFindPrompt(pos, radius)
+ local best, bestD
+ for _, obj in ipairs(workspace:GetDescendants()) do
+ if obj:IsA("ProximityPrompt") and obj.Enabled then
+ local anchor = obj.Parent
+ if anchor and anchor:IsA("Attachment") and anchor.Parent then anchor = anchor.Parent end
+ local ppos
+ if anchor and anchor:IsA("BasePart") then
+ ppos = anchor.Position
+ elseif anchor and anchor:IsA("Model") then
+ local pp = anchor.PrimaryPart or anchor:FindFirstChildWhichIsA("BasePart")
+ if pp then ppos = pp.Position end
+ end
+ if ppos then
+ local d = (ppos - pos).Magnitude
+ if d <= radius and (not bestD or d < bestD) then
+ best, bestD = obj, d
+ end
+ end
+ end
+ end
+ return best
+end
+
+local function fcTapE()
+ pcall(function()
+ VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+ task.wait(0.15)
+ VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+ end)
+end
+
+local function fcPressE(pos)
+ local prompt = fcFindPrompt(pos, 12)
+ if prompt then
+ local ok = false
+ if type(fireproximityprompt) == "function" then
+ ok = pcall(fireproximityprompt, prompt)
+ end
+ if not ok then
+ ok = pcall(function()
+ prompt:InputHoldBegin()
+ task.wait((prompt.HoldDuration or 0) + 0.15)
+ prompt:InputHoldEnd()
+ end)
+ end
+ if not ok then
+ fcTapE()
+ end
+ else
+ fcTapE()
+ if type(keypress) == "function" then
+ pcall(keypress, 0x45)
+ task.wait(0.15)
+ pcall(keyrelease, 0x45)
+ end
+ end
+ task.wait(0.45)
+end
+
+local function farmCookingLoop()
+ local firstPass = true
+ while FarmCookingRunning do
+ local startIdx = firstPass and 1 or FC_LOOP_START
+ for idx = startIdx, #FC_ROUTE do
+ if not FarmCookingRunning then break end
+ local wp = FC_ROUTE[idx]
+ local action = wp[2]
+ if action == "circle" then
+ if fcIsBlueCircleNear(wp[1]) then
+ fcWalkTo(wp[1])
+ task.wait(0.3)
+ end
+ else
+ if firstPass and idx == 1 then
+ pcall(function()
+ local _, _, hrp0 = fcGetChar()
+ if hrp0 and (wp[1] - hrp0.Position).Magnitude > 50 then
+ hrp0.CFrame = CFrame.new(wp[1] + Vector3.new(0, 4, 0))
+ task.wait(0.5)
+ end
+ end)
+ end
+ fcWalkTo(wp[1])
+ if action == "grab" and FarmCookingRunning then
+ fcPressE(wp[1])
+ end
+ end
+ end
+ firstPass = false
+ local t0 = os.clock()
+ while FarmCookingRunning and os.clock() - t0 < 0.5 do
+ task.wait(0.1)
+ end
+ end
+ fcStopMovement()
+end
+
+local fcToggle = aS:Toggle({
+ Title = "Farm Cooking",
+ Desc = "Ruta automatica: camina, agarra con E y solo va a los circulos azules. Los circulos se repiten cada ciclo.",
+ Default = false,
+ Callback = function(v)
+ FarmCookingRunning = v
+ if v then
+ task.spawn(function()
+ pcall(farmCookingLoop)
+ end)
+ if A then A:Notify({Title = "Farm Cooking ON", Duration = 2}) end
+ else
+ fcStopMovement()
+ if A then A:Notify({Title = "Farm Cooking OFF", Duration = 2}) end
+ end
+ end
+})
+D:Register("FarmCooking", fcToggle)
+
 aS:Section({Title = "COMBAT"})
 
 local function modifyFists(aU, aV)
