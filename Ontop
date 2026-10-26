@@ -2464,7 +2464,7 @@ local VIM = game:GetService("VirtualInputManager")
 local FarmCookingRunning = false
 local FC_BLUE_RADIUS = 10
 local FC_REACH = 3
--- Ruta: action = "walk" | "grab" (presiona E) | "circle" (va si hay circulo azul y SE QUEDA hasta que desaparezca)
+-- Ruta: action = "walk" | "grab" (presiona E) | "circle" (va SOLO si hay circulo azul de verdad - IGNORA botes de basura y props azules - y SE QUEDA hasta que desaparezca)
 local FC_ROUTE = {
  {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
  {Vector3.new(-226.22644, 255.099686, 326.575897), "walk"},
@@ -2482,7 +2482,7 @@ local FC_ROUTE = {
  {Vector3.new(-251.023392, 256.34906, 337.518616), "circle"},
  {Vector3.new(-279.103119, 256.34906, 335.235107), "grab"},
 }
--- Lo que se repite cada ciclo: los circulos (11-14) y el grab final (15)
+-- Lo que se repite cada ciclo: los circulos (11-14) y el grab final (15). El farm va a la coordenada de la E, agarra, y va al circulo azul REAL (nunca al bote de basura)
 local FC_LOOP_START = 11
 local FC_STAY_MAX = 90
 
@@ -2616,17 +2616,58 @@ local function fcGuiHasBlue(obj)
  return false
 end
 
+-- FILTRO DE BASURA: ignora botes de basura, cubos, barriles, tachos y props azules que NO son el circulo
+local FC_TRASH_SUB = {"trash", "basura", "garbage", "dumpster", "waste", "recycl", "tacho"}
+local FC_TRASH_WORD = {"bin", "can", "bote", "cubo", "dump"}
+
+local function fcIsTrashNamed(aN)
+ local s = string.lower(tostring(aN))
+ for _, w in ipairs(FC_TRASH_SUB) do
+ if string.find(s, w, 1, true) then
+ return true
+ end
+ end
+ for tok in string.gmatch(s, "%a+") do
+ for _, w in ipairs(FC_TRASH_WORD) do
+ if tok == w then
+ return true
+ end
+ end
+ end
+ return false
+end
+
+local function fcIsTrashObject(part)
+ if fcIsTrashNamed(part.Name) then
+ return true
+ end
+ local anc = part.Parent
+ local depth = 0
+ while anc and anc ~= workspace and depth < 4 do
+ if fcIsTrashNamed(anc.Name) then
+ return true
+ end
+ anc = anc.Parent
+ depth = depth + 1
+ end
+ return false
+end
+
 local function fcFindBlueCircle(pos)
  local ok, parts = pcall(function()
  return workspace:GetPartBoundsInRadius(pos, FC_BLUE_RADIUS)
  end)
  if ok and parts then
- local best, bestD
+ local best, bestScore
  for _, part in ipairs(parts) do
  if part:IsA("BasePart") and part.Transparency < 0.95 then
  local mdl = part:FindFirstAncestorOfClass("Model")
  local isChar = mdl and a:GetPlayerFromCharacter(mdl)
- if not isChar then
+ if not isChar and not fcIsTrashObject(part) then
+ local sX, sY, sZ = part.Size.X, part.Size.Y, part.Size.Z
+ local footprint = math.max(sX, sZ)
+ local isStanding = sY > footprint * 1.15 and sY > 1.8
+ if not isStanding then
  local blue = false
  if fcBlueDominant(part.Color) then
  blue = true
@@ -2651,8 +2692,11 @@ local function fcFindBlueCircle(pos)
  end
  if blue then
  local d = (part.Position - pos).Magnitude
- if not bestD or d < bestD then
- best, bestD = part, d
+ local flatBonus = math.max(0, 3 - sY) * 2
+ local score = -d + flatBonus
+ if not bestScore or score > bestScore then
+ best, bestScore = part, score
+ end
  end
  end
  end
@@ -2767,8 +2811,11 @@ local function farmCookingLoop()
  if action == "circle" then
  local circ = fcFindBlueCircle(wp[1])
  if circ then
- fcWalkTo(wp[1])
- if FarmCookingRunning then
+ local reached = fcWalkTo(circ.Position)
+ if not reached and FarmCookingRunning and circ.Parent and circ:IsDescendantOf(workspace) then
+ reached = fcWalkTo(wp[1])
+ end
+ if FarmCookingRunning and reached then
  fcStayAtCircle(wp[1], circ)
  end
  task.wait(0.3)
@@ -2800,7 +2847,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Ruta automatica: camina, agarra con E. En los circulos azules se queda hasta que desaparezcan y luego va a agarrar.",
+ Desc = "Ruta automatica: camina, agarra con E. Va al circulo azul REAL (ignora botes de basura y props azules) y se queda hasta que desaparezca, luego va a agarrar.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
