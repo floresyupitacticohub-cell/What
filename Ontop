@@ -325,11 +325,11 @@ end)
 
 local F = false
 local G = false
-local H = 200
+local H = 350
 local I
 local J
 local _fovLastVisible = false
-local _fovLastRadius = 200
+local _fovLastRadius = 350
 
 local SilentAimTargetPart = "head"
 
@@ -1298,7 +1298,7 @@ local function createESP(aG)
  end
  end)
  if I == aG then
- espColor = Color3.fromRGB(255, 0, 0)
+ espColor = Color3.fromRGB(255, 255, 255)
  elseif inSplash then
  espColor = Color3.fromRGB(0, 200, 255)
  elseif isPlayerExcluded(aG.Name) then
@@ -1744,45 +1744,11 @@ b.RenderStepped:Connect(function()
  local aU, aV = y:WorldToViewportPoint(aT)
 
  if aV then
- K.Visible = true
- K.From = aR
- K.To = Vector2.new(aU.X, aU.Y)
- local hue = (tick() * 0.3) % 1
- K.Color = Color3.fromHSV(hue, 1, 1)
- K.Thickness = 1.3
-
- if not TracerESP then
- TracerESP = {}
+ K.Visible = false
+ if TracerESP then
  for aW = 1, 4 do
- TracerESP[aW] = Drawing.new("Line")
- TracerESP[aW].Thickness = 1.2
- TracerESP[aW].Visible = true
+ TracerESP[aW].Visible = false
  end
- end
-
- local aW = y:WorldToViewportPoint(aQ.Position + Vector3.new(0, 0.5, 0))
- local aX = y:WorldToViewportPoint(aQ.Position - Vector3.new(0, 0.5, 0))
- local aY = Vector2.new(aU.X, aU.Y)
- local aZ = (aW - aX).Magnitude / 2
- local a_ = aZ
- local a0 = 8
- local a1 = 25
- a_ = math.clamp(a_, a0, a1)
- aZ = math.clamp(aZ, a0, a1)
-
- local a2 = Vector2.new(aY.X, aY.Y - aZ)
- local a3 = Vector2.new(aY.X, aY.Y + aZ)
- local a4 = Vector2.new(aY.X - a_, aY.Y)
- local a5 = Vector2.new(aY.X + a_, aY.Y)
-
- TracerESP[1].From, TracerESP[1].To = a2, a5
- TracerESP[2].From, TracerESP[2].To = a5, a3
- TracerESP[3].From, TracerESP[3].To = a3, a4
- TracerESP[4].From, TracerESP[4].To = a4, a2
- local tracerHue = (tick() * 0.3) % 1
- for a6 = 1, 4 do
- TracerESP[a6].Color = Color3.fromHSV(tracerHue, 1, 1)
- TracerESP[a6].Visible = true
  end
  else
  K.Visible = false
@@ -1872,7 +1838,7 @@ b.Heartbeat:Connect(function()
  pcall(CheckAndPickup)
 end)
 local _jumpHolding = false
-local _jumpFlySpeed = 40
+local _jumpFlySpeed = 50
 local _jumpConns = {}
 
 local function stopHighJump()
@@ -2123,9 +2089,9 @@ D:Register("SilentAimAttach", aP)
 local aQ = aN:Slider({
  Title = "FOV: ",
  Step = 1,
- Value = {Min = 20, Max = 800, Default = 200},
+ Value = {Min = 20, Max = 1500, Default = 350},
  Callback = function(aQ)
- H = tonumber(aQ) or 200
+ H = tonumber(aQ) or 350
  end
 })
 D:Register("FOVRadius", aQ)
