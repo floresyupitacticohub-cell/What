@@ -1,4 +1,4 @@
-Pasted Content_1793003476894.txt
+
 local a = game:GetService("Players")
 local b = game:GetService("RunService")
 local c = game:GetService("ReplicatedStorage")
