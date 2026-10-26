@@ -2471,7 +2471,8 @@ local FC_CIRCLE_WAIT = 12 -- segundos que espera en cada circulo azul antes de i
 local FC_CLICK_WAIT = 3 -- segundos de espera en el punto 6 antes de hacer click en el medio
 local FC_CIRCLE_CLICK_AT = 10 -- segundo (dentro de la espera del circulo) en que hace el click
 local FC_CLICK_DOWN_Y = 0.7 -- altura del click en el circulo: 0.5 = centro de pantalla, 0.7 = centro pero abajo
--- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo circulo azul real; espera 12s, click al segundo 10 centro-abajo, si desaparece antes sale YA a la E) | "click" (punto 6: 3s + click centro)
+local FC_GRAB_POS = Vector3.new(-279.103119, 256.34906, 335.235107) -- coordenadas de la E: aqui va a agarrar despues de CADA circulo
+-- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo circulo azul real; espera 12s, click al segundo 10 y LUEGO VA A LA E A AGARRAR) | "click" (punto 6: 3s + click centro)
 local FC_ROUTE = {
  {Vector3.new(-222.390045, 255.099686, 318.59671), "walk"},
  {Vector3.new(-226.22644, 255.099686, 326.575897), "walk"},
@@ -2487,9 +2488,9 @@ local FC_ROUTE = {
  {Vector3.new(-266.716278, 256.34906, 337.80896), "circle"},
  {Vector3.new(-261.974487, 256.34906, 350.103363), "circle"},
  {Vector3.new(-251.023392, 256.34906, 337.518616), "circle"},
- {Vector3.new(-279.103119, 256.34906, 335.235107), "grab"},
+ {Vector3.new(-279.103119, 256.34906, 335.235107), "walk"},
 }
--- Ciclo: circulo (espera 12s) -> coordenada de la E (agarra) -> circulo -> asi repite. El punto 6 espera 3s y hace click en el medio
+-- Ciclo: circulo (espera 12s, click al segundo 10) -> coordenadas de la E (agarra) -> siguiente circulo -> ... -> lo hace de nuevo. Punto 6: espera 3s y click en el medio
 local FC_LOOP_START = 11
 
 local function fcGetChar()
@@ -2904,6 +2905,15 @@ local function farmCookingLoop()
  if FarmCookingRunning then
  fcStayAtCircle(wp[1], FC_CIRCLE_WAIT)
  end
+ -- despues del circulo: va a las coordenadas de la E, agarra, y lo hace de nuevo con el siguiente circulo
+ if FarmCookingRunning then
+ if not fcTweenTo(FC_GRAB_POS) then
+ fcWalkTo(FC_GRAB_POS)
+ end
+ if FarmCookingRunning then
+ fcPressE(FC_GRAB_POS)
+ end
+ end
  task.wait(0.3)
  end
  else
@@ -2939,7 +2949,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Tween glide. Circulo: espera 12s (si desaparece antes, va a la E ya), click centro-abajo al segundo 10, luego agarra con E. Punto 6: 3s + click centro. Ignora botes de basura.",
+ Desc = "Tween glide. Cada circulo azul: espera 12s (o menos si desaparece), click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
