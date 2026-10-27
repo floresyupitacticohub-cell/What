@@ -34,6 +34,10 @@ local ObsidianLib
 pcall(function()
  ObsidianLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua"))()
 end)
+local ObsidianThemeManager
+pcall(function()
+ ObsidianThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/addons/ThemeManager.lua"))()
+end)
 
 local _elementCounter = 0
 local function _genIdx()
@@ -52,7 +56,7 @@ if ObsidianLib then
  Footer = opts.Footer or opts.Author or "",
  NotifySide = "Right",
  ShowCustomCursor = true,
- ToggleKeybind = opts.KeyCode or Enum.KeyCode.G,
+ ToggleKeybind = opts.KeyCode or Enum.KeyCode.RightControl,
  AutoShow = true,
  Center = true,
  Resizable = true,
@@ -61,6 +65,8 @@ if ObsidianLib then
  local wrapper = {}
  wrapper._window = win
  wrapper.Visible = true
+ wrapper.ThemeManager = ObsidianThemeManager
+ wrapper._tabs = {}
 
  function wrapper:EditOpenButton(opts2) end
 
@@ -78,9 +84,10 @@ if ObsidianLib then
  function wrapper:Tab(tabOpts)
  tabOpts = tabOpts or {}
  local tab = win:AddTab({ Title = tabOpts.Title or "Tab", Icon = tabOpts.Icon })
+ table.insert(wrapper._tabs, tab)
  local tabWrapper = {}
  tabWrapper._tab = tab
- tabWrapper._currentGroupbox = tab:AddLeftGroupbox(tabOpts.Title or "Section")
+ tabWrapper._currentGroupbox = nil
  tabWrapper._side = "Left"
 
  function tabWrapper:Section(sectionOpts)
@@ -253,16 +260,16 @@ if A then
  end)
 
  B = A:CreateWindow({
- Title = "SASWERE KINGX 🔫🔪🫪",
+ Title = "SASWERE KINGX",
  Icon = "",
  Author = "By Yupitactico",
- Footer = "Saswere versión 8.31 | Release [PAID]",
- Folder = "Yupitactico",
+ Footer = "Saswere versión 7.01 | Release [PAID]",
+ Folder = "SaswereKingx",
  Size = UDim2.fromOffset(650, 400),
  Theme = "Obsidian",
  Transparent = true,
  Resizable = true,
- KeyCode = Enum.KeyCode.G
+ KeyCode = Enum.KeyCode.RightControl
  })
 
  B:EditOpenButton({
@@ -309,14 +316,43 @@ end
 local C = B.ConfigManager
 local D = C:CreateConfig("YupitacticoConfig")
 
-local bf = B:Tab({Title = "Principal", Icon = "house"})
-local aS = B:Tab({Title = "Automatizacion", Icon = "zap"})
-local aN = B:Tab({Title = "Combate", Icon = "swords"})
-local VehicleTab = B:Tab({Title = "Teletransportes", Icon = "signpost"})
-local aW = B:Tab({Title = "Visuales", Icon = "eye"})
-local aInv = B:Tab({Title = "Visor Inventario", Icon = "package"})
-local a1 = B:Tab({Title = "Movimiento", Icon = "footprints"})
-local bk = B:Tab({Title = "Ajustes", Icon = "settings"})
+-- compartida con el farm y con el boton Unload (declarada aqui arriba para que todos la vean)
+local FarmCookingRunning = false
+
+-- pestanas EXACTAS de la plantilla Obsidian pedida: todo el contenido del script vive en estas 7 pestanas
+local bf = B:Tab({Title = "Main", Icon = "house"})
+local aS = B:Tab({Title = "Automation", Icon = "repeat"})
+local aN = B:Tab({Title = "Combat", Icon = "swords"})
+local VehicleTab = B:Tab({Title = "Teleports", Icon = "map-pin"})
+local aW = B:Tab({Title = "Visuals", Icon = "eye"})
+local aInv = B:Tab({Title = "Inventory Viewer", Icon = "backpack"})
+local a1 = bf -- opciones de personaje/movimiento dentro de Main
+local bk = B:Tab({Title = "Settings", Icon = "settings"})
+
+-- ThemeManager (addon oficial de Obsidian) aplicado a la pestana Settings, como en la plantilla
+pcall(function()
+ if ObsidianThemeManager and bk and bk._tab then
+  ObsidianThemeManager:SetLibrary(ObsidianLib)
+  ObsidianThemeManager:SetFolder("SaswereKingx")
+  ObsidianThemeManager:ApplyToTab(bk._tab)
+ end
+end)
+
+-- boton Unload en Settings > Menu (igual que la plantilla)
+pcall(function()
+ if bk and bk._tab and bk._tab.AddRightGroupbox then
+  local menuGb = bk._tab:AddRightGroupbox("Menu")
+  menuGb:AddButton({
+   Text = "Unload",
+   Func = function()
+    FarmCookingRunning = false
+    pcall(function()
+     if ObsidianLib and ObsidianLib.Unload then ObsidianLib:Unload() end
+    end)
+   end,
+  })
+ end
+end)
 
 local E
 pcall(function()
@@ -350,6 +386,24 @@ K.Thickness = 1
 K.Color = Color3.fromRGB(255, 50, 50)
 K.Transparency = 1
 K.Visible = false
+
+-- origen de TODAS las lineas (tracer y linea roja): MI TORSO (HumanoidRootPart) proyectado en pantalla;
+-- si el torso no es visible (1ra persona) usa el centro-abajo. NUNCA la cabeza.
+local function _myTorsoScreenPos()
+ local okT, resT = pcall(function()
+  local chT = r.Character
+  local rootT = chT and chT:FindFirstChild("HumanoidRootPart")
+  if rootT then
+   local posT, onT = y:WorldToViewportPoint(rootT.Position)
+   if onT and posT.Z > 0 then
+    return Vector2.new(posT.X, posT.Y)
+   end
+  end
+  return Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y)
+ end)
+ if okT and resT then return resT end
+ return Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y / 2)
+end
 
 local L = {}
 local M = false
@@ -409,6 +463,36 @@ local ay = false
 local az = {}
 local aA = 100
 local aB = {}
+
+-- ==================== HIGHLIGHT (caja verde) ====================
+-- restaurado: el toggle "Highlight Box" de Visuals controla esta flag
+local highlightEnabled = false
+local highlights = {}
+local function createHighlight(character)
+ local hl = Instance.new("Highlight")
+ hl.Name = "PlayerHighlight"
+ hl.FillColor = Color3.fromRGB(0, 255, 0)
+ hl.OutlineColor = Color3.fromRGB(0, 255, 0)
+ hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+ hl.Adornee = character
+ hl.Parent = workspace
+ return hl
+end
+local function updateHighlights()
+ for plrH, hlH in pairs(highlights) do
+  if not plrH.Parent or not plrH.Character then
+   pcall(function() hlH:Destroy() end)
+   highlights[plrH] = nil
+  elseif not hlH or not hlH.Parent then
+   highlights[plrH] = createHighlight(plrH.Character)
+  end
+ end
+ for _, plrH2 in ipairs(a:GetPlayers()) do
+  if plrH2 ~= r and plrH2.Character and not highlights[plrH2] then
+   highlights[plrH2] = createHighlight(plrH2.Character)
+  end
+ end
+end
 
 local aC
 pcall(function()
@@ -1210,10 +1294,10 @@ local function createESP(aG)
  local aS = aP.Y - 15
 
  if tracerESPEnabled then
- -- tracer anclado al TORSO (HumanoidRootPart) del enemigo, desde el centro de la pantalla
- local screenCenter = Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y / 2)
+ -- tracer: de MI TORSO (proyectado en pantalla) al TORSO del enemigo; blanco y grueso
+ local fromPt = _myTorsoScreenPos()
  local targetPoint = Vector2.new(aR, aP.Y)
- tracerLine.From = screenCenter
+ tracerLine.From = fromPt
  tracerLine.To = targetPoint
  local maxDist = 500
  local distClamped = math.clamp(aO, 0, maxDist)
@@ -1738,7 +1822,7 @@ b.RenderStepped:Connect(function()
  local aQ = (SelectedAimPart == "HumanoidRootPart") and aO:FindFirstChild("HumanoidRootPart") or aO:FindFirstChild("Head")
 
  if aP and aP.Health > 0 and aQ then
- local aR = Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y / 2)
+ local aR = _myTorsoScreenPos() -- origen de la linea roja: MI TORSO, no la cabeza
  local aS = aQ.Position
  aL = aL:Lerp(aS, aJ)
  local aT = aL
@@ -2475,7 +2559,7 @@ aS:Section({Title = "FARM:"})
 -- ==================== FARM COOKING ====================
 local VIM = game:GetService("VirtualInputManager")
 local fcTweenService = game:GetService("TweenService")
-local FarmCookingRunning = false
+FarmCookingRunning = false -- (declarada arriba, compartida con el boton Unload)
 local FC_CurrentTween = nil
 local FC_BLUE_RADIUS = 14
 local FC_REACH = 3
@@ -2973,7 +3057,16 @@ local fcToggle = aS:Toggle({
  FarmCookingRunning = v
  if v then
  task.spawn(function()
- pcall(farmCookingLoop)
+  local okF, errF = pcall(farmCookingLoop)
+  -- si el loop revienta, NUNCA dejar el toggle activo y el char parado en la E
+  if not okF then
+   FarmCookingRunning = false
+   pcall(fcStopMovement)
+   pcall(function()
+    if fcToggle and fcToggle.SetValue then fcToggle:SetValue(false) end
+   end)
+   if A then A:Notify({Title = "Farm Cooking", Description = "Error: " .. tostring(errF), Duration = 4}) end
+  end
  end)
  if A then A:Notify({Title = "Farm Cooking ON", Duration = 2}) end
  else
@@ -2983,6 +3076,43 @@ local fcToggle = aS:Toggle({
  end
 })
 D:Register("FarmCooking", fcToggle)
+
+-- ANTI-QUEDADO: con el farm ON, si el personaje lleva 25s seguidos sin moverse (2 studs),
+-- se apaga SOLO (toggle a false) para que nunca quede "activado" pero clavado en la E
+task.spawn(function()
+ local lastPos, stillT = nil, 0
+ while true do
+  task.wait(5)
+  if FarmCookingRunning then
+   local _, _, hrpW = fcGetChar()
+   if hrpW then
+    local pNow = hrpW.Position
+    if lastPos and (pNow - lastPos).Magnitude < 2 then
+     stillT = stillT + 5
+    else
+     stillT = 0
+    end
+    lastPos = pNow
+    if stillT >= 25 then
+     stillT = 0
+     lastPos = nil
+     FarmCookingRunning = false
+     pcall(fcStopMovement)
+     pcall(function()
+      if fcToggle and fcToggle.SetValue then fcToggle:SetValue(false) end
+     end)
+     if A then A:Notify({Title = "Farm Cooking", Description = "Se atasco: apagado automatico", Duration = 4}) end
+    end
+   else
+    lastPos = nil
+    stillT = 0
+   end
+  else
+   lastPos = nil
+   stillT = 0
+  end
+ end
+end)
 
 aS:Section({Title = "COMBAT"})
 
@@ -3110,13 +3240,67 @@ D:Register("ItemsESP", aX)
 
 aW:Section({Title = "Visual:"})
 
--- (eliminados del menu: Name/titulo, Health/vida, Distance/puntos y Highlight/caja - solo queda el Tracer)
+-- TODAS las opciones ESP restauradas (nada se quito): Tracer, Name, Health, Distance y Highlight Box
 local aTracer = aW:Toggle({
  Title = "Tracer",
  Default = false,
  Callback = function(v) tracerESPEnabled = v end
 })
 D:Register("TracerESP", aTracer)
+
+local aNameT = aW:Toggle({
+ Title = "Name",
+ Default = false,
+ Callback = function(v) M = v end
+})
+D:Register("NameESP", aNameT)
+
+local aHealthT = aW:Toggle({
+ Title = "Health",
+ Default = false,
+ Callback = function(v) O = v end
+})
+D:Register("HealthESP", aHealthT)
+
+local aDistT = aW:Toggle({
+ Title = "Distance",
+ Default = false,
+ Callback = function(v) N = v end
+})
+D:Register("DistanceESP", aDistT)
+
+local aBoxT = aW:Toggle({
+ Title = "Highlight Box",
+ Default = false,
+ Callback = function(v)
+ highlightEnabled = v
+ if not v then
+  for plrH, hlH in pairs(aB) do
+   pcall(function() hlH:Destroy() end)
+   aB[plrH] = nil
+  end
+  for plrH2, hlH2 in pairs(highlights) do
+   pcall(function() hlH2:Destroy() end)
+   highlights[plrH2] = nil
+  end
+  pcall(function()
+   for _, objH in ipairs(workspace:GetChildren()) do
+    pcall(function()
+     if objH:IsA("Highlight") and objH.Name == "PlayerHighlight" then objH:Destroy() end
+    end)
+   end
+  end)
+ else
+  for _, plrH3 in ipairs(a:GetPlayers()) do
+   if plrH3 ~= r and plrH3.Character then
+    if not highlights[plrH3] then highlights[plrH3] = createHighlight(plrH3.Character) end
+    pcall(function() updateHighlight(plrH3) end)
+   end
+  end
+ end
+ end
+})
+D:Register("HighlightESP", aBoxT)
 
 function updateHighlight(a1)
  if a1 == game.Players.LocalPlayer then return end
@@ -4281,6 +4465,22 @@ do
  end)
 end
 
+-- Waypoints (de la plantilla): imprime tu posicion actual
+VehicleTab:Section({Title = "Waypoints"})
+VehicleTab:Button({
+ Title = "Set Waypoint",
+ Desc = "Imprime la posicion de tu HumanoidRootPart",
+ Callback = function()
+  local player = game:GetService("Players").LocalPlayer
+  local character = player.Character
+  local root = character and character:FindFirstChild("HumanoidRootPart")
+
+  if root then
+   print(root.Position)
+  end
+ end,
+})
+
 VehicleTab:Section({Title = "Vehicle"})
 
 VehicleTab:Button({
@@ -4370,5 +4570,3 @@ task.spawn(function()
 end)
 
 task.wait(1)
-
-print("hello kingx")
