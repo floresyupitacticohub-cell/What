@@ -2847,6 +2847,27 @@ local function fcTweenTo(pos)
  return fcTweenSegment(pos)
 end
 
+-- Va al CIRCULO azul: NUNCA lo esquiva, nunca se para a su lado y nunca lo salta.
+-- Lejos: se acerca con las coordenadas de esquiva (sin atravesar paredes) pero SIN usar la ultima coordenada;
+-- el tramo final SIEMPRE entra DIRECTO al circulo (al llegar a las coordenadas la esquiva NO se activa)
+local function fcTweenToCircle(pos)
+ fcWaitTpUnpaused()
+ local _, _, hrp0 = fcGetChar()
+ if not hrp0 then return false end
+ local dist0 = (Vector3.new(pos.X, pos.Y, pos.Z) - hrp0.Position).Magnitude
+ if dist0 > FC_AVOID_DIST then
+ local pts = fcPathPointsTo(pos)
+ if pts then
+ for i = 2, #pts - 1 do
+ if not FarmCookingRunning then return false end
+ fcWaitTpUnpaused()
+ if not fcTweenSegment(pts[i]) then break end
+ end
+ end
+ end
+ return fcTweenSegment(pos)
+end
+
 -- Click con VirtualInputManager (mismo metodo que el auto ATM del script); yFactor 0.5 = centro, 0.7 = centro pero abajo
 local function fcClickAt(yFactor)
  local ok = pcall(function()
@@ -2925,9 +2946,9 @@ local function fcIsTrashObject(part)
  return false
 end
 
-local function fcFindBlueCircle(pos)
+local function fcFindBlueCircle(pos, radio)
  local ok, parts = pcall(function()
- return workspace:GetPartBoundsInRadius(pos, FC_BLUE_RADIUS)
+ return workspace:GetPartBoundsInRadius(pos, radio or FC_BLUE_RADIUS)
  end)
  if ok and parts then
  local best, bestScore
@@ -3050,7 +3071,7 @@ end
 
 -- Espera en el circulo: mantiene posicion; si el circulo desaparece antes de tiempo SALE YA y sigue hacia la E sin buguearse;
 -- al pasar 10 segundos en el circulo hace UN click en el centro pero abajo
-local function fcStayAtCircle(pos, segundos)
+local function fcStayAtCircle(pos, segundos, forzar)
  local t0 = os.clock()
  local clicked = false
  local goneT = 0
@@ -3065,12 +3086,17 @@ local function fcStayAtCircle(pos, segundos)
   if not FarmCookingRunning then break end
  end
  -- circulo desaparecido: confirmar 0.75s seguidos sin circulo para no buguearse con parpadeos/animaciones
+ -- (forzar = no habia circulo al llegar: igual espera los 12s completos, NUNCA se salta el circulo)
+ if forzar then
+ goneT = 0
+ else
  if fcFindBlueCircle(pos) then
  goneT = 0
  else
  goneT = goneT + 0.25
  if goneT >= 0.75 then
  return true
+ end
  end
  end
  -- mantener la posicion sobre el circulo
@@ -3100,13 +3126,15 @@ local function farmCookingLoop()
  local action = wp[2]
  if action == "circle" then
  local circ = fcFindBlueCircle(wp[1])
- if circ then
- local cpos = circ.Position
- if not fcTweenTo(cpos) then
- fcWalkTo(wp[1])
+ -- SIEMPRE va al circulo: si lo detecta va a su posicion REAL; si todavia no aparece, va al punto guardado
+ local cpos = circ and circ.Position or wp[1]
+ -- NUNCA lo esquiva ni se queda a su lado: el tramo final entra DIRECTO al circulo
+ if not fcTweenToCircle(cpos) then
+ fcWalkTo(cpos)
  end
  if FarmCookingRunning then
- fcStayAtCircle(wp[1], FC_CIRCLE_WAIT)
+ -- se queda SOBRE el circulo 12s (click centro-abajo al segundo 10); sin circulo detectado igual espera los 12s
+ fcStayAtCircle(cpos, FC_CIRCLE_WAIT, not circ)
  end
  -- despues del circulo: va a las coordenadas de la E, agarra, y lo hace de nuevo con el siguiente circulo
  if FarmCookingRunning then
@@ -3118,7 +3146,6 @@ local function farmCookingLoop()
  end
  end
  task.wait(0.3)
- end
  else
  if firstPass and idx == 1 then
  pcall(function()
@@ -3153,7 +3180,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Tween glide. Cada circulo azul: espera 12s (o menos si desaparece), click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura. Si detecta TP se pausa 4s y sigue. Esquiva obstaculos (coordenadas sin atravesar paredes); ya en las coordenadas va directo.",
+ Desc = "Tween glide. SIEMPRE va al circulo azul (nunca lo esquiva ni lo salta) y se queda SOBRE el 12s, click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura. Si detecta TP se pausa 4s y sigue. Esquiva obstaculos al ir lejos; al llegar a las coordenadas (circulo/E) entra DIRECTO.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
@@ -3908,6 +3935,48 @@ local bi = bf:Toggle({
  end
 })
 D:Register("AutoFinnish", bi)
+
+-- INVISIBLE: tu personaje no se ve (invisible local). Se reaplica solo cada 0.2s
+-- (si la camara lo resetea) y tambien al reaparecer; al apagarlo vuelve a verse normal
+local bInvOn = false
+task.spawn(function()
+ while true do
+ task.wait(0.2)
+ if bInvOn then
+ pcall(function()
+ local chInv = r.Character
+ if chInv then
+ for _, objInv in ipairs(chInv:GetDescendants()) do
+ if objInv:IsA("BasePart") then
+ objInv.LocalTransparencyModifier = 1
+ end
+ end
+ end
+ end)
+ end
+ end
+end)
+local bInvT = bf:Toggle({
+ Title = "Invisible",
+ Desc = "Tu personaje no se ve (invisible local). Al apagarlo vuelve a verse normal.",
+ Default = false,
+ Callback = function(bkV)
+ bInvOn = bkV
+ if not bkV then
+ pcall(function()
+ local chInv = r.Character
+ if chInv then
+ for _, objInv in ipairs(chInv:GetDescendants()) do
+ if objInv:IsA("BasePart") then
+ objInv.LocalTransparencyModifier = 0
+ end
+ end
+ end
+ end)
+ end
+ end
+})
+D:Register("Invisible", bInvT)
 
 bf:Divider()
 end
