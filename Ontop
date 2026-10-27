@@ -379,7 +379,7 @@ bf = B:Tab({Title = "Main", Icon = "house"})
 aS = B:Tab({Title = "Automation", Icon = "repeat"})
 aN = B:Tab({Title = "Combat", Icon = "swords"})
 VehicleTab = B:Tab({Title = "Teleports", Icon = "map-pin"})
-aW = B:Tab({Title = "Visuals", Icon = "eye"})
+TagTab = B:Tab({Title = "Tag", Icon = "tag"})
 a1 = bf
 bk = B:Tab({Title = "Settings", Icon = "settings"})
 
@@ -3700,172 +3700,6 @@ D:Register("AutoAttack_Enabled", aV)
 end
 do
 
-aW:Section({Title = "Visual:"})
-
-local aTracer = aW:Toggle({
- Title = "Tracer",
- Default = false,
- Callback = function(v) tracerESPEnabled = v end
-})
-D:Register("TracerESP", aTracer)
-
-local aNameT = aW:Toggle({
- Title = "Name",
- Default = false,
- Callback = function(v) M = v end
-})
-D:Register("NameESP", aNameT)
-
-local aHealthT = aW:Toggle({
- Title = "Health",
- Default = false,
- Callback = function(v) O = v end
-})
-D:Register("HealthESP", aHealthT)
-
-local aDistT = aW:Toggle({
- Title = "Distance",
- Default = false,
- Callback = function(v) N = v end
-})
-D:Register("DistanceESP", aDistT)
-
-local aBoxT = aW:Toggle({
- Title = "Highlight Box",
- Default = false,
- Callback = function(v)
- highlightEnabled = v
- if not v then
-  for plrH, hlH in pairs(aB) do
-   pcall(function() hlH:Destroy() end)
-   aB[plrH] = nil
-  end
-  for plrH2, hlH2 in pairs(highlights) do
-   pcall(function() hlH2:Destroy() end)
-   highlights[plrH2] = nil
-  end
-  pcall(function()
-   for _, objH in ipairs(workspace:GetChildren()) do
-    pcall(function()
-     if objH:IsA("Highlight") and objH.Name == "PlayerHighlight" then objH:Destroy() end
-    end)
-   end
-  end)
- else
-  for _, plrH3 in ipairs(a:GetPlayers()) do
-   if plrH3 ~= r and plrH3.Character then
-    if not highlights[plrH3] then highlights[plrH3] = createHighlight(plrH3.Character) end
-    pcall(function() updateHighlight(plrH3) end)
-   end
-  end
- end
- end
-})
-D:Register("HighlightESP", aBoxT)
-
-local espItemsT = aW:Toggle({
- Title = "ESP Ítems",
- Desc = "Muestra el nombre de los items tirados en el suelo con color de su rareza",
- Default = false,
- Callback = function(v) espItemsEnabled = v end
-})
-D:Register("ItemsGroundESP", espItemsT)
-
-local espDropT = aW:Toggle({
- Title = "ESP Drop Ítems",
- Desc = "Muestra la distancia de los items tirados en el suelo",
- Default = false,
- Callback = function(v) espDropDistEnabled = v end
-})
-D:Register("DropItemsESP", espDropT)
-
-local espPickT = aW:Toggle({
- Title = "ESP Pickup Ítems",
- Desc = "Dibuja una caja alrededor de los items que puedes recoger",
- Default = false,
- Callback = function(v) espPickupBoxEnabled = v end
-})
-D:Register("PickupItemsESP", espPickT)
-
-local espInvT = aW:Toggle({
- Title = "ESP Inventario",
- Desc = "Muestra los items del inventario de los demas jugadores sobre su cabeza",
- Default = false,
- Callback = function(v)
- aw = v
- if v then
- for _, plr in ipairs(a:GetPlayers()) do
- if plr ~= r and plr.Character then
- createBillboardForPlayer(plr)
- end
- end
- ax = task.spawn(function()
- while aw do
- task.wait(14)
- if not aw then break end
- for _, plr in ipairs(a:GetPlayers()) do
- if plr ~= r and plr.Character then
- createBillboardForPlayer(plr)
- end
- end
- end
- end)
- if A then A:Notify({Title = "ESP Inventario ON", Duration = 3}) end
- else
- if ax then
- task.cancel(ax)
- ax = nil
- end
- for _, billboard in pairs(av) do billboard:Destroy() end
- av = {}
- if A then A:Notify({Title = "ESP Inventario OFF", Duration = 3}) end
- end
- end
-})
-D:Register("InventoryESP", espInvT)
-
-function updateHighlight(a1)
- if a1 == game.Players.LocalPlayer then return end
- if not a1.Character then return end
- local a2 = a1.Character:FindFirstChild("HumanoidRootPart")
- if not a2 then return end
-
- if aB[a1] then aB[a1]:Destroy() aB[a1] = nil end
-
- if highlightEnabled then
- local a3 = Instance.new("Highlight")
- a3.Name = "PlayerHighlight"
- a3.Adornee = a1.Character
- a3.FillColor = Color3.fromRGB(0, 255, 0)
- a3.OutlineColor = Color3.fromRGB(0, 255, 0)
- a3.Parent = workspace
- aB[a1] = a3
- end
-end
-
-game.Players.PlayerAdded:Connect(function(a1)
- a1.CharacterAdded:Connect(function()
- task.wait(0.1)
- updateHighlight(a1)
- end)
-end)
-
-game.Players.PlayerRemoving:Connect(function(a1)
- if aB[a1] then aB[a1]:Destroy() aB[a1] = nil end
-end)
-
-for a1, a2 in pairs(game.Players:GetPlayers()) do
- if a2 ~= game.Players.LocalPlayer then
- a2.CharacterAdded:Connect(function()
- task.wait(0.1)
- updateHighlight(a2)
- end)
- updateHighlight(a2)
- end
-end
-end
-do
-
 a1:Section({Title = "CHARACTER:"})
 
 local a2 = a1:Toggle({
@@ -4134,13 +3968,6 @@ pcall(function()
  if a1 and typeof(a1.Section) == "function" then a1:Section({Title = "Att:"}) end
 end)
 
-local a9 = a1:Toggle({
- Title = "Pickup items",
- Default = false,
- Callback = function(a9) ak = a9 end
-})
-D:Register("PickupItems", a9)
-
 local ba = a1:Toggle({
  Title = "Anti Ragdoll",
  Default = false,
@@ -4180,93 +4007,103 @@ local ba = a1:Toggle({
 })
 D:Register("AntiRagdoll", ba)
 
-local anonymousNameValue = "SASWERE KINGX"
 local hideNameEnabled = false
 local hideNameConnection = nil
+local hideNameOriginalText = nil
+local hideNameLoopThread = nil
+local anonNombreActual = "SASWERE KINGX"
 
-local hideNameTexts = {"s$a&s#w@ar?e", "R$i&c#k@ k$i#n@gx"}
-local hideNameJunkChars = {"$", "&", "#", "@", "?", ";", "*", "%", "!", "."}
-local hideNameNumberSet = {40, 21, 100, 305, 148, 1201, 385, 7, 88, 17, 250, 99}
-
-local function randomizeHideNameText(label)
- if not label then return end
- label.Text = anonymousNameValue
+local function getAnonNamePool()
+ local pool = {"SASWERE KINGX"}
+ pcall(function()
+ for _, plr in ipairs(a:GetPlayers()) do
+ if plr.Name and plr.Name ~= "" then
+ table.insert(pool, plr.Name)
+ end
+ end
+ end)
+ return pool
 end
 
-local function randomizeHideNameNumbers(label)
- if not label then return end
- local parts = {}
- for i = 1, 8 do
- table.insert(parts, tostring(hideNameNumberSet[math.random(1, #hideNameNumberSet)]))
+local function pickAnonName()
+ local pool = getAnonNamePool()
+ anonNombreActual = pool[math.random(1, #pool)]
+ return anonNombreActual
+end
+
+local function stopHideNameLoop()
+ if hideNameLoopThread then
+ pcall(function() task.cancel(hideNameLoopThread) end)
+ hideNameLoopThread = nil
  end
- label.Text = table.concat(parts, " ")
+end
+
+local function startHideNameLoop()
+ stopHideNameLoop()
+ hideNameLoopThread = task.spawn(function()
+ local lastPick = 0
+ while hideNameEnabled do
+ pcall(function()
+ local c2 = a.LocalPlayer.Character
+ if c2 then
+ local hrp2 = c2:FindFirstChild("HumanoidRootPart")
+ if hrp2 then
+ local bb2 = hrp2:FindFirstChild("CharacterBillboardGui")
+ if bb2 then
+ local nl2 = bb2:FindFirstChild("PlayerName")
+ if nl2 and nl2:IsA("TextLabel") then
+ if hideNameOriginalText == nil or hideNameOriginalText == "" then
+ hideNameOriginalText = nl2.Text
+ end
+ nl2.Visible = true
+ nl2.Text = anonNombreActual
+ end
+ else
+ local ov2 = hrp2:FindFirstChild("YupitacticoOverride")
+ if not ov2 then
+ ov2 = Instance.new("BillboardGui")
+ ov2.Name = "YupitacticoOverride"
+ ov2.Adornee = hrp2
+ ov2.Size = UDim2.new(0, 240, 0, 30)
+ ov2.StudsOffset = Vector3.new(0, 3, 0)
+ ov2.AlwaysOnTop = true
+ ov2.Parent = hrp2
+ local tl2 = Instance.new("TextLabel")
+ tl2.Name = "AnonOnly"
+ tl2.Size = UDim2.new(1, 0, 1, 0)
+ tl2.BackgroundTransparency = 1
+ tl2.TextColor3 = Color3.fromRGB(255, 255, 255)
+ tl2.TextScaled = true
+ tl2.Font = Enum.Font.GothamBold
+ tl2.Parent = ov2
+ end
+ local tl3 = ov2:FindFirstChildOfClass("TextLabel")
+ if tl3 then
+ tl3.Text = anonNombreActual
+ end
+ end
+ end
+ end
+ end)
+ if os.clock() - lastPick >= 3 then
+ lastPick = os.clock()
+ pickAnonName()
+ end
+ task.wait(0.1)
+ end
+ end)
 end
 
 local function applyHideName(char)
- if not hideNameEnabled or not char then return end
- task.spawn(function()
- local hrp = char:WaitForChild("HumanoidRootPart", 5)
- if not hrp then return end
- local billboard = hrp:FindFirstChild("CharacterBillboardGui")
- if billboard then
- local nameLabel = billboard:FindFirstChild("PlayerName")
- if nameLabel and nameLabel:IsA("TextLabel") then
- nameLabel.Visible = false
- end
- end
- if hrp:FindFirstChild("YupitacticoOverride") then
- hrp.YupitacticoOverride:Destroy()
- end
- local override = Instance.new("BillboardGui")
- override.Name = "YupitacticoOverride"
- override.Adornee = hrp
- override.Size = UDim2.new(0, 240, 0, 60)
- override.StudsOffset = Vector3.new(0, 3, 0)
- override.AlwaysOnTop = true
- override.Parent = hrp
-
- local nameLabel2 = Instance.new("TextLabel")
- nameLabel2.Name = "RandomName"
- nameLabel2.Size = UDim2.new(1, 0, 0, 28)
- nameLabel2.Position = UDim2.new(0, 0, 0, 0)
- nameLabel2.BackgroundTransparency = 1
- nameLabel2.Text = anonymousNameValue
- nameLabel2.TextColor3 = Color3.fromRGB(255, 255, 255)
- nameLabel2.TextScaled = true
- nameLabel2.Font = Enum.Font.GothamBold
- nameLabel2.Parent = override
- local stroke1 = Instance.new("UIStroke")
- stroke1.Thickness = 1.5
- stroke1.Color = Color3.new(0, 0, 0)
- stroke1.Parent = nameLabel2
-
- local levelLabel = Instance.new("TextLabel")
- levelLabel.Name = "RandomLevel"
- levelLabel.Size = UDim2.new(1, 0, 0, 22)
- levelLabel.Position = UDim2.new(0, 0, 0, 32)
- levelLabel.BackgroundTransparency = 1
- levelLabel.Text = "40 21 40 100 305 148 1201 385"
- levelLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
- levelLabel.TextScaled = true
- levelLabel.Font = Enum.Font.GothamBold
- levelLabel.Parent = override
- local stroke2 = Instance.new("UIStroke")
- stroke2.Thickness = 1.5
- stroke2.Color = Color3.new(0, 0, 0)
- stroke2.Parent = levelLabel
-
- task.spawn(function()
- while override and override.Parent and hideNameEnabled do
- randomizeHideNameText(nameLabel2)
- randomizeHideNameNumbers(levelLabel)
- task.wait(0.05)
- end
- end)
- end)
+ if not hideNameEnabled then return end
+ startHideNameLoop()
 end
 
 local function restoreName(char)
  if not char then return end
+ stopHideNameLoop()
+ local origText = hideNameOriginalText
+ hideNameOriginalText = nil
  task.spawn(function()
  local hrp = char:FindFirstChild("HumanoidRootPart")
  if not hrp then return end
@@ -4278,6 +4115,9 @@ local function restoreName(char)
  local nameLabel = billboard:FindFirstChild("PlayerName")
  if nameLabel and nameLabel:IsA("TextLabel") then
  nameLabel.Visible = true
+ if origText and origText ~= "" then
+ nameLabel.Text = origText
+ end
  end
  end
  end)
@@ -4285,7 +4125,7 @@ end
 
 local bb = a1:Toggle({
  Title = "Nombre anónimo",
- Desc = "Oculta tu nombre y muestra uno anónimo (elige cual en el desplegable)",
+ Desc = "Cambia tu nombre por uno aleatorio de los del servidor o SASWERE KINGX",
  Default = false,
  Callback = function(state)
  hideNameEnabled = state
@@ -4312,44 +4152,164 @@ local bb = a1:Toggle({
 })
 D:Register("HideName", bb)
 
-local anonNameDropdown = a1:Dropdown({
- Title = "Nombre Anónimo:",
- Desc = "Nombre que se muestra sobre tu cabeza (nombres del servidor + SASWERE KINGX)",
- Values = {"SASWERE KINGX"},
- Value = "SASWERE KINGX",
- Callback = function(val)
- if val and val ~= "" then
- anonymousNameValue = val
- end
- end
-})
-D:Register("AnonName", anonNameDropdown)
+TagTab:Section({Title = "TAG:"})
 
-local function refreshAnonNames()
- local vals = {"SASWERE KINGX"}
- pcall(function()
- for _, plr in ipairs(a:GetPlayers()) do
- if plr ~= r then
- table.insert(vals, plr.Name)
+local tagActive = false
+local tagMode = "Con nombre"
+local tagTexto = "SASWERE KINGX"
+local tagMarks = {}
+local tagConns = {}
+
+local function tagClearOne(plr)
+ local mk = tagMarks[plr]
+ if mk then
+  pcall(function() mk:Destroy() end)
+  tagMarks[plr] = nil
  end
- end
- end)
- pcall(function()
- if anonNameDropdown and anonNameDropdown.SetValues then
- anonNameDropdown:SetValues(vals)
- end
+end
+
+local function tagRestoreOne(plr)
+ task.spawn(function()
+  pcall(function()
+   local ch = plr.Character
+   if not ch then return end
+   local hrp = ch:FindFirstChild("HumanoidRootPart")
+   if not hrp then return end
+   local bb = hrp:FindFirstChild("CharacterBillboardGui")
+   if bb then
+    local nl = bb:FindFirstChild("PlayerName")
+    if nl and nl:IsA("TextLabel") then
+     nl.Visible = true
+    end
+   end
+  end)
  end)
 end
 
-refreshAnonNames()
-a.PlayerAdded:Connect(function()
- task.wait(0.5)
- refreshAnonNames()
-end)
-a.PlayerRemoving:Connect(function()
- task.wait(0.5)
- refreshAnonNames()
-end)
+local function tagApplyOne(plr)
+ if not tagActive then return end
+ task.spawn(function()
+  pcall(function()
+   local ch = plr.Character
+   if not ch then return end
+   local hrp = ch:FindFirstChild("HumanoidRootPart") or ch:WaitForChild("HumanoidRootPart", 5)
+   if not hrp then return end
+   tagClearOne(plr)
+   if tagMode == "Sin nombre" then
+    local bb2 = hrp:FindFirstChild("CharacterBillboardGui")
+    if bb2 then
+     local nl2 = bb2:FindFirstChild("PlayerName")
+     if nl2 and nl2:IsA("TextLabel") then
+      nl2.Visible = false
+     end
+    end
+    return
+   end
+   local mk = Instance.new("BillboardGui")
+   mk.Name = "KingxTag"
+   mk.Adornee = hrp
+   mk.Size = UDim2.new(0, 260, 0, 44)
+   mk.StudsOffset = Vector3.new(0, 3.4, 0)
+   mk.AlwaysOnTop = true
+   mk.MaxDistance = 500
+   local lb = Instance.new("TextLabel")
+   lb.Name = "TagLabel"
+   lb.Size = UDim2.new(1, 0, 1, 0)
+   lb.BackgroundTransparency = 1
+   lb.Text = tagTexto
+   lb.TextColor3 = Color3.fromRGB(181, 119, 176)
+   lb.TextStrokeColor3 = Color3.new(0, 0, 0)
+   lb.TextStrokeTransparency = 0
+   lb.TextScaled = true
+   lb.Font = Enum.Font.GothamBold
+   lb.Parent = mk
+   mk.Parent = hrp
+   tagMarks[plr] = mk
+  end)
+ end)
+end
+
+local function tagApplyAll()
+ for _, plr in ipairs(a:GetPlayers()) do
+  if plr ~= r then
+   tagApplyOne(plr)
+  end
+ end
+end
+
+local function tagClearAll()
+ for _, plr in ipairs(a:GetPlayers()) do
+  tagClearOne(plr)
+  tagRestoreOne(plr)
+ end
+end
+
+local tagToggle = TagTab:Toggle({
+ Title = "Tag",
+ Desc = "Pone el nombre sobre la cabeza de todos los jugadores",
+ Default = false,
+ Callback = function(state)
+  tagActive = state
+  for _, cn in ipairs(tagConns) do
+   pcall(function() cn:Disconnect() end)
+  end
+  tagConns = {}
+  if state then
+   tagApplyAll()
+   table.insert(tagConns, a.PlayerAdded:Connect(function(plr)
+    task.wait(0.5)
+    tagApplyOne(plr)
+    table.insert(tagConns, plr.CharacterAdded:Connect(function()
+     task.wait(0.8)
+     tagApplyOne(plr)
+    end))
+   end))
+   for _, plr in ipairs(a:GetPlayers()) do
+    if plr ~= r then
+     table.insert(tagConns, plr.CharacterAdded:Connect(function()
+      task.wait(0.8)
+      tagApplyOne(plr)
+     end))
+    end
+   end
+   table.insert(tagConns, a.PlayerRemoving:Connect(function(plr)
+    tagClearOne(plr)
+   end))
+  else
+   tagClearAll()
+  end
+ end
+})
+D:Register("TagToggle", tagToggle)
+
+local tagModeDd = TagTab:Dropdown({
+ Title = "Modo del Tag:",
+ Desc = "Con nombre muestra el tag, Sin nombre oculta los nombres",
+ Values = {"Con nombre", "Sin nombre"},
+ Value = "Con nombre",
+ Callback = function(val)
+  tagMode = val or "Con nombre"
+  if tagActive then
+   tagApplyAll()
+  end
+ end
+})
+D:Register("TagMode", tagModeDd)
+
+local tagInput = TagTab:Input({
+ Title = "Nombre del Tag:",
+ Value = "SASWERE KINGX",
+ Placeholder = "Escribe el nombre del tag...",
+ Callback = function(val)
+  if val and val ~= "" then
+   tagTexto = val
+   if tagActive and tagMode == "Con nombre" then
+    tagApplyAll()
+   end
+  end
+ end
+})
+D:Register("TagText", tagInput)
 
 local bc = a1:Toggle({
  Title = "Auto Respawn",
@@ -4433,6 +4393,150 @@ local be = a1:Slider({
 })
 D:Register("SnapHeight", be)
 
+a1:Section({Title = "BUMP CAR:"})
+
+local bumpCarEnabled = false
+local bumpCarThread = nil
+local bumpCarMods = nil
+
+local function bumpCarInit()
+ if bumpCarMods then return bumpCarMods end
+ local out = {}
+ pcall(function()
+ local mods = c:WaitForChild("Modules", 10)
+ local core = mods and mods:WaitForChild("Core", 10)
+ if core and core:FindFirstChild("Net") then
+ local okN, netM = pcall(require, core.Net)
+ if okN then out.Net = netM end
+ end
+ local gameF = mods and mods:WaitForChild("Game", 10)
+ local vs = gameF and gameF:WaitForChild("VehicleSystem", 10)
+ local vehM = vs and vs:WaitForChild("Vehicle", 10)
+ if vehM then
+ local okV, vehR = pcall(require, vehM)
+ if okV then out.Vehicle = vehR end
+ end
+ if core then
+ local chM = core:WaitForChild("Char", 10)
+ if chM then
+ local okC, charR = pcall(require, chM)
+ if okC then out.Char = charR end
+ end
+ end
+ end)
+ if not out.Vehicle or not out.Char then return nil end
+ bumpCarMods = out
+ return out
+end
+
+local function bumpCarSend(mods, car, target, asm)
+ local sent = false
+ pcall(function()
+ if mods.Net and mods.Net.send then
+ mods.Net.send("run_over", car, target, asm)
+ sent = true
+ end
+ end)
+ if not sent then
+ pcall(function()
+ local counter = nil
+ for _, obj in ipairs(getgc and getgc(true) or {}) do
+ if typeof(obj) == "table" and rawget(obj, "event") and rawget(obj, "func") then
+ counter = obj
+ break
+ end
+ end
+ if counter then
+ counter.event = (counter.event or 0) + 1
+ E:FireServer(counter.event, "run_over", car, target, asm)
+ end
+ end)
+ end
+end
+
+local function bumpCarStart()
+ local mods = bumpCarInit()
+ if not mods then
+ if A then A:Notify({Title = "Bump Car", Description = "Modulos del juego no disponibles", Duration = 3}) end
+ return
+ end
+ if bumpCarThread then return end
+ bumpCarThread = task.spawn(function()
+ while bumpCarEnabled do
+ task.wait(0.15)
+ pcall(function()
+ local car = nil
+ if mods.Vehicle.get_car_player_is_in then car = mods.Vehicle.get_car_player_is_in() end
+ if not car then return end
+ local driverSeat = car:FindFirstChild("DriverSeat", true)
+ if not driverSeat or not driverSeat:IsA("BasePart") then return end
+ local myRoot = r.Character and r.Character:FindFirstChild("HumanoidRootPart")
+ if not myRoot then return end
+ local targets = {}
+ if mods.Char.get_all then targets = mods.Char.get_all() or {} end
+ for _, target in ipairs(targets) do
+ if target and target ~= r.Character then
+ local hrp = target:FindFirstChild("HumanoidRootPart")
+ if hrp and (myRoot.Position - hrp.Position).Magnitude < 100 then
+ local asm = driverSeat.AssemblyLinearVelocity + Vector3.new(115, 115, 115)
+ bumpCarSend(mods, car, target, asm)
+ end
+ end
+ end
+ end)
+ end
+ bumpCarThread = nil
+ end)
+end
+
+local bumpCarToggle = a1:Toggle({
+ Title = "Bump Car",
+ Desc = "Empuja y lanza a los jugadores cercanos con tu carro",
+ Default = false,
+ Callback = function(v)
+ bumpCarEnabled = v
+ if v then
+ bumpCarStart()
+ else
+ if bumpCarThread then
+ pcall(function() task.cancel(bumpCarThread) end)
+ bumpCarThread = nil
+ end
+ end
+ end
+})
+D:Register("BumpCar", bumpCarToggle)
+
+local snapCarBtn = a1:Button({
+ Title = "Snap Car",
+ Desc = "Trae tu carro hacia ti al instante (solo el snap, sin imagen)",
+ Callback = function()
+ pcall(function()
+ local car = getMyVehicle()
+ if not car then
+ if A then A:Notify({Title = "Snap Car", Description = "No tienes ningun carro", Duration = 3}) end
+ return
+ end
+ local myRoot = r.Character and r.Character:FindFirstChild("HumanoidRootPart")
+ if not myRoot then return end
+ local look = myRoot.CFrame.LookVector
+ local flat = Vector3.new(look.X, 0, look.Z)
+ if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, -1) end
+ local yaw = math.atan2(-flat.X, -flat.Z)
+ local frontPos = myRoot.Position + flat.Unit * 14
+ car:PivotTo(CFrame.new(frontPos.X, myRoot.Position.Y + 1, frontPos.Z) * CFrame.Angles(0, yaw, 0))
+ for _, part2 in ipairs(car:GetDescendants()) do
+ if part2:IsA("BasePart") then
+ part2.AssemblyLinearVelocity = Vector3.zero
+ part2.AssemblyAngularVelocity = Vector3.zero
+ end
+ end
+ if A then A:Notify({Title = "Snap Car", Description = "Listo!", Duration = 2}) end
+ end)
+ end
+})
+D:Register("SnapCar", snapCarBtn)
+
 a1:Section({Title = "ITEMS AURA:"})
 
 local auraEnabled = false
@@ -4482,8 +4586,7 @@ task.spawn(function()
  if model:IsA("Model") and not model:GetAttribute("Locked") then
  local part = model:FindFirstChild("PickUpZone") or model:FindFirstChildWhichIsA("BasePart")
  if part then
- local rar = getItemRarityByName(model.Name)
- if auraRaritySel[rar] then
+ do
  local dist = (part.Position - myRoot.Position).Magnitude
  if dist <= auraRadius and (now - (auraCooldowns[model] or 0)) >= 1.5 then
  auraCooldowns[model] = now
@@ -4504,34 +4607,13 @@ end)
 
 local auraToggle = a1:Toggle({
  Title = "Items Aura",
- Desc = "Agarra automaticamente los items del suelo segun su rareza",
+ Desc = "Agarra automaticamente los items del suelo",
  Default = false,
  Callback = function(val)
  auraEnabled = val
  end
 })
 D:Register("ItemsAura", auraToggle)
-
-local auraRarityDropdown = a1:Dropdown({
- Title = "Rarezas (Items Aura)",
- Desc = "Elige una, varias o todas",
- Values = AURA_RARITIES,
- Value = {"Common", "Uncommon", "Rare", "Epic", "Legendary"},
- Multi = true,
- Callback = function(sel)
- auraRaritySel = {}
- if type(sel) == "table" then
- for k, v2 in pairs(sel) do
- if type(k) == "string" and v2 then
- auraRaritySel[k] = true
- elseif type(k) == "number" and type(v2) == "string" then
- auraRaritySel[v2] = true
- end
- end
- end
- end
-})
-D:Register("ItemsAuraRarities", auraRarityDropdown)
 
 local auraRadiusSlider = a1:Slider({
  Title = "Radio Items Aura",
@@ -4890,101 +4972,6 @@ local bn = bk:Button({
 })
 D:Register("ClaimAllQuest", bn)
 
-bk:Divider()
-bk:Section({Title = "Auto Buy Ammo"})
-
-do
- local selectedBulletType = "Pistol"
- local autoBuyAmmoEnabled = false
-
- local function getCrateOptions()
- local map = workspace:FindFirstChild("Map")
- if not map then return nil end
- local tiles = map:FindFirstChild("Tiles")
- if not tiles then return nil end
- local gunShopTile = tiles:FindFirstChild("GunShopTile")
- if not gunShopTile then return nil end
- local patriotWeapons = gunShopTile:FindFirstChild("PatriotWeapons")
- if not patriotWeapons then return nil end
- local interior = patriotWeapons:FindFirstChild("Interior")
- if not interior then return nil end
- local crates = interior:FindFirstChild("Crates")
- if not crates then return nil end
- local ammoCrate = crates:FindFirstChild("Ammo Crate")
- if not ammoCrate then return nil end
- return ammoCrate:FindFirstChild("CrateOptions")
- end
-
- local function openCrateWithType(bulletType)
- local crateOptions = getCrateOptions()
- if not crateOptions then
- if A then A:Notify({Title = "No Ammo Crate found", Duration = 2}) end
- return
- end
- local targetItem = crateOptions:FindFirstChild(bulletType)
- if not targetItem then
- if A then A:Notify({Title = "No " .. bulletType .. " in crate", Duration = 2}) end
- return
- end
- local result = NetGet("open_crate", targetItem, "money")
- if result then
- if A then A:Notify({Title = "Bought " .. bulletType .. " ammo", Duration = 2}) end
- else
- if A then A:Notify({Title = "Failed to buy ammo", Duration = 2}) end
- end
- end
-
- local bulletDropdown = bk:Dropdown({
- Title = "Bullet Type",
- Values = {"Pistol", "Rifle", "Shotgun", "Random"},
- Value = "Pistol",
- Multi = false,
- Callback = function(selected)
- selectedBulletType = selected
- end
- })
- D:Register("BulletType", bulletDropdown)
-
- bk:Button({
- Title = "Buy Ammo Now",
- Desc = "Buy selected bullet type once",
- Callback = function()
- local useType = selectedBulletType
- if useType == "Random" then
- local options = {"Pistol", "Rifle", "Shotgun"}
- useType = options[math.random(1, #options)]
- end
- openCrateWithType(useType)
- end
- })
-
- local autoBuyToggle = bk:Toggle({
- Title = "Auto Buy Ammo",
- Desc = "Auto-buys ammo every 5 seconds",
- Default = false,
- Callback = function(val)
- autoBuyAmmoEnabled = val
- if val then
- task.spawn(function()
- while autoBuyAmmoEnabled do
- task.wait(5)
- if not autoBuyAmmoEnabled then break end
- local useType = selectedBulletType
- if useType == "Random" then
- local options = {"Pistol", "Rifle", "Shotgun"}
- useType = options[math.random(1, #options)]
- end
- pcall(function() openCrateWithType(useType) end)
- end
- end)
- if A then A:Notify({Title = "Auto Buy Ammo ON", Duration = 3}) end
- else
- if A then A:Notify({Title = "Auto Buy Ammo OFF", Duration = 3}) end
- end
- end
- })
- D:Register("AutoBuyAmmo", autoBuyToggle)
-end
 do
  local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
  local VirtualInputManager = game:GetService("VirtualInputManager")
