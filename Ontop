@@ -2561,6 +2561,16 @@ local VIM = game:GetService("VirtualInputManager")
 local fcTweenService = game:GetService("TweenService")
 FarmCookingRunning = false -- (declarada arriba, compartida con el boton Unload)
 local FC_CurrentTween = nil
+local FC_TP_PAUSE_UNTIL = 0 -- el farm esta pausado por TP hasta este os.clock()
+local FC_TP_GRACE_UNTIL = 0 -- gracia: el TP propio del farm (colocacion inicial) no cuenta como TP del anti-cheat
+local function fcTpPaused()
+ return os.clock() < FC_TP_PAUSE_UNTIL
+end
+local function fcWaitTpUnpaused()
+ while FarmCookingRunning and os.clock() < FC_TP_PAUSE_UNTIL do
+  task.wait(0.2)
+ end
+end
 local FC_BLUE_RADIUS = 14
 local FC_REACH = 3
 local FC_TWEEN_SPEED = 30 -- velocidad del movimiento del farm (studs por segundo, estilo MM2) - sube o baja aqui
@@ -2568,6 +2578,9 @@ local FC_CIRCLE_WAIT = 12 -- segundos que espera en cada circulo azul antes de i
 local FC_CLICK_WAIT = 3 -- segundos de espera en el punto 6 antes de hacer click en el medio
 local FC_CIRCLE_CLICK_AT = 10 -- segundo (dentro de la espera del circulo) en que hace el click
 local FC_CLICK_DOWN_Y = 0.7 -- altura del click en el circulo: 0.5 = centro de pantalla, 0.7 = centro pero abajo
+local FC_AVOID_DIST = 12 -- si ya esta a esta distancia o MENOS de las coordenadas: va DIRECTO (no se activa la esquiva de obstaculos)
+local FC_TP_JUMP = 30 -- salto de posicion (studs en un instante) que cuenta como TP del anti-cheat
+local FC_TP_PAUSE = 4 -- segundos que el farm SE PAUSA al detectar un TP, y luego sigue
 local FC_GRAB_POS = Vector3.new(-279.103119, 256.34906, 335.235107) -- coordenadas de la E: aqui va a agarrar despues de CADA circulo
 -- Ruta: action = "walk" | "grab" (presiona E) | "circle" (solo circulo azul real; espera 12s, click al segundo 10 y LUEGO VA A LA E A AGARRAR) | "click" (punto 6: 3s + click centro)
 local FC_ROUTE = {
@@ -2665,6 +2678,7 @@ local function fcPathTo(pos)
 end
 
 local function fcWalkTo(pos)
+ fcWaitTpUnpaused() -- si hay pausa por TP detectado, no camina hasta que pase
  local target = pos
  local attempts = 0
  while FarmCookingRunning do
@@ -2710,23 +2724,34 @@ local function fcWalkTo(pos)
 end
 
 -- Movimiento del farm con Tween (glide suave, estilo MM2) en vez de caminar
-local function fcTweenTo(pos)
- local char, hum, hrp = fcGetChar()
- if not (char and hum and hrp) then
+-- Tramo lineal a UN punto. Si se detecta TP del anti-cheat: el glide se para, espera la pausa de 4s y reanuda desde donde quedo
+local function fcTweenSegment(pos)
+ local char = fcGetChar()
+ if not char then
  fcWaitChar()
- char, hum, hrp = fcGetChar()
- if not (char and hum and hrp) then return false end
+ char = fcGetChar()
+ if not char then return false end
  end
- local distancia = (Vector3.new(pos.X, pos.Y, pos.Z) - hrp.Position).Magnitude
- local duracion = math.max(distancia / math.max(FC_TWEEN_SPEED, 1), 0.1)
- local done = false
- local tween
+ local reached = false
  local ok = pcall(function()
- local rot = hrp.CFrame - hrp.CFrame.Position
- tween = fcTweenService:Create(
- hrp,
+ local intentos = 0
+ while FarmCookingRunning and intentos < 6 do
+ intentos = intentos + 1
+ local c3, _, p3 = fcGetChar()
+ if not c3 then return end
+ local destino = Vector3.new(pos.X, pos.Y, pos.Z)
+ local d3 = (destino - p3.Position).Magnitude
+ if d3 <= 0.5 then
+ reached = true
+ return
+ end
+ local rot = p3.CFrame - p3.CFrame.Position
+ local duracion = math.max(d3 / math.max(FC_TWEEN_SPEED, 1), 0.1)
+ local done = false
+ local tween = fcTweenService:Create(
+ p3,
  TweenInfo.new(duracion, Enum.EasingStyle.Linear),
- {CFrame = CFrame.new(pos) * rot}
+ {CFrame = CFrame.new(destino) * rot}
  )
  local conn = tween.Completed:Connect(function()
  done = true
@@ -2734,17 +2759,32 @@ local function fcTweenTo(pos)
  FC_CurrentTween = tween
  tween:Play()
  local t0 = os.clock()
+ local pausado = false
  while not done and os.clock() - t0 < duracion + 1 do
  if not FarmCookingRunning or not fcGetChar() then
- pcall(function() tween:Cancel() end)
+ break
+ end
+ if fcTpPaused() then
+ pausado = true
  break
  end
  task.wait(0.05)
  end
- if not done then
  pcall(function() tween:Cancel() end)
- end
  conn:Disconnect()
+ FC_CurrentTween = nil
+ if done then
+ reached = true
+ return
+ end
+ if not FarmCookingRunning then return end
+ if pausado then
+ -- TP detectado: espera los 4s de pausa y reintenta el tramo desde la posicion actual
+ fcWaitTpUnpaused()
+ else
+ return -- timeout real del tramo
+ end
+ end
  end)
  FC_CurrentTween = nil
  if not ok then return false end
@@ -2752,6 +2792,59 @@ local function fcTweenTo(pos)
  if not c2 then return false end
  local flat = Vector3.new(pos.X, p2.Position.Y, pos.Z)
  return (flat - p2.Position).Magnitude <= FC_REACH + 2.5
+end
+
+-- ESQUIVA OBSTACULOS: crea coordenadas intermedias (PathfindingService) que NO atraviesan paredes
+local function fcPathPointsTo(pos)
+ local ok, pts = pcall(function()
+ local c3, _, p3 = fcGetChar()
+ if not (c3 and p3) then return nil end
+ local path = PathfindingService:CreateAsync({
+ AgentRadius = 2.5,
+ AgentHeight = 5,
+ AgentCanJump = true,
+ WaypointSpacing = 4
+ })
+ path:ComputeAsync(p3.Position, pos)
+ if path.Status ~= Enum.PathStatus.Success then return nil end
+ local out = {}
+ for _, wp in ipairs(path:GetWaypoints()) do
+ table.insert(out, wp.Position)
+ end
+ return out
+ end)
+ if ok and pts and #pts >= 2 then return pts end
+ return nil
+end
+
+-- Va a "pos": LEJOS = esquiva obstaculos (recorre las coordenadas intermedias sin atravesar paredes);
+-- CERCA de las coordenadas (FC_AVOID_DIST) = va DIRECTO sin esquiva: aunque atraviese algo, no hace nada
+local function fcTweenTo(pos)
+ fcWaitTpUnpaused()
+ local _, _, hrp0 = fcGetChar()
+ if not hrp0 then return false end
+ local dist0 = (Vector3.new(pos.X, pos.Y, pos.Z) - hrp0.Position).Magnitude
+ local pts = nil
+ if dist0 > FC_AVOID_DIST then
+ pts = fcPathPointsTo(pos)
+ end
+ if pts then
+ -- el waypoint 1 es donde ya esta: recorre el resto de coordenadas creadas
+ for i = 2, #pts do
+ if not FarmCookingRunning then return false end
+ fcWaitTpUnpaused()
+ if not fcTweenSegment(pts[i]) then
+ -- tramo fallido: intenta directo al destino final (si no llega, el caller cae al walk fallback)
+ return fcTweenSegment(pos)
+ end
+ end
+ local c4, _, p4 = fcGetChar()
+ if not c4 then return false end
+ local flat4 = Vector3.new(pos.X, p4.Position.Y, pos.Z)
+ if (flat4 - p4.Position).Magnitude <= FC_REACH + 2.5 then return true end
+ return fcTweenSegment(pos)
+ end
+ return fcTweenSegment(pos)
 end
 
 -- Click con VirtualInputManager (mismo metodo que el auto ATM del script); yFactor 0.5 = centro, 0.7 = centro pero abajo
@@ -2961,8 +3054,16 @@ local function fcStayAtCircle(pos, segundos)
  local t0 = os.clock()
  local clicked = false
  local goneT = 0
- while FarmCookingRunning and os.clock() - t0 < segundos do
- local elapsed = os.clock() - t0
+ local pausedAccum = 0
+ while FarmCookingRunning and os.clock() - t0 - pausedAccum < segundos do
+ local elapsed = os.clock() - t0 - pausedAccum
+ if fcTpPaused() then
+  -- TP detectado: el farm se detiene; ese tiempo NO cuenta para los 12s del circulo
+  local pT0 = os.clock()
+  fcWaitTpUnpaused()
+  pausedAccum = pausedAccum + (os.clock() - pT0)
+  if not FarmCookingRunning then break end
+ end
  -- circulo desaparecido: confirmar 0.75s seguidos sin circulo para no buguearse con parpadeos/animaciones
  if fcFindBlueCircle(pos) then
  goneT = 0
@@ -3024,6 +3125,7 @@ local function farmCookingLoop()
  local _, _, hrp0 = fcGetChar()
  if hrp0 and (wp[1] - hrp0.Position).Magnitude > 50 then
  hrp0.CFrame = CFrame.new(wp[1] + Vector3.new(0, 4, 0))
+ FC_TP_GRACE_UNTIL = os.clock() + 2 -- TP propio del farm: el detector NO lo cuenta
  task.wait(0.5)
  end
  end)
@@ -3051,7 +3153,7 @@ end
 
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Tween glide. Cada circulo azul: espera 12s (o menos si desaparece), click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura.",
+ Desc = "Tween glide. Cada circulo azul: espera 12s (o menos si desaparece), click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura. Si detecta TP se pausa 4s y sigue. Esquiva obstaculos (coordenadas sin atravesar paredes); ya en las coordenadas va directo.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
@@ -3110,6 +3212,37 @@ task.spawn(function()
   else
    lastPos = nil
    stillT = 0
+  end
+ end
+end)
+
+-- ANTI-TP: si el anti-cheat teletransporta al personaje (salto de posicion en un instante > FC_TP_JUMP),
+-- el farm SE PAUSA FC_TP_PAUSE segundos y luego sigue donde quedo
+task.spawn(function()
+ local lastPT = nil
+ while true do
+  task.wait(0.1)
+  if FarmCookingRunning then
+   local _, _, hrpT = fcGetChar()
+   if hrpT then
+    local pT = hrpT.Position
+    if lastPT and os.clock() >= FC_TP_GRACE_UNTIL and (pT - lastPT).Magnitude > FC_TP_JUMP then
+     FC_TP_PAUSE_UNTIL = os.clock() + FC_TP_PAUSE
+     pcall(function()
+      if FC_CurrentTween then FC_CurrentTween:Cancel() end
+     end)
+     pcall(function()
+      local humT = hrpT.Parent and hrpT.Parent:FindFirstChildOfClass("Humanoid")
+      if humT then humT:MoveTo(hrpT.Position) end
+     end)
+     if A then A:Notify({Title = "Farm Cooking", Description = "TP detectado: pausa " .. FC_TP_PAUSE .. "s", Duration = 2}) end
+    end
+    lastPT = pT
+   else
+    lastPT = nil
+   end
+  else
+   lastPT = nil
   end
  end
 end)
