@@ -1,25 +1,25 @@
-local a = game:GetService("Players")
-local b = game:GetService("RunService")
-local c = game:GetService("ReplicatedStorage")
-local d = game:GetService("UserInputService")
-local e = game:GetService("TweenService")
-local f = game:GetService("Debris")
-local g = game:GetService("Workspace")
-local h = game:GetService("ContextActionService")
+a = game:GetService("Players")
+b = game:GetService("RunService")
+c = game:GetService("ReplicatedStorage")
+d = game:GetService("UserInputService")
+e = game:GetService("TweenService")
+f = game:GetService("Debris")
+g = game:GetService("Workspace")
+h = game:GetService("ContextActionService")
 
-local function _safeWait(parent, name, timeout)
+function _safeWait(parent, name, timeout)
  local ok, res = pcall(function()
   return parent:WaitForChild(name, timeout)
  end)
  if ok and res then return res end
  return nil
 end
-local function _safeRequire(fn)
+function _safeRequire(fn)
  local ok, res = pcall(fn)
  if ok and type(res) == "table" then return res end
  return nil
 end
-local i = _safeWait(c, "Remotes", 15)
+i = _safeWait(c, "Remotes", 15)
 if not i then
  i = Instance.new("Folder")
  i.Name = "Remotes"
@@ -27,53 +27,53 @@ if not i then
  _dSend.Name = "Send"
  _dSend.Parent = i
 end
-local j = _safeRequire(function() return require(c.Modules.Core.Util) end)
-local k = _safeRequire(function() return require(c.Modules.Game.UI.BuyPromptUI) end)
-local l = _safeRequire(function() return require(c.Modules.Game.Emotes.EmotesUI) end)
-local m = _safeRequire(function() return require(c.Modules.Game.Emotes.EmotesList) end)
-local n = _safeRequire(function() return require(c.Modules.Core.UI) end)
-local o = _safeRequire(function() return require(c.Modules.Core.Char) end)
+j = _safeRequire(function() return require(c.Modules.Core.Util) end)
+k = _safeRequire(function() return require(c.Modules.Game.UI.BuyPromptUI) end)
+l = _safeRequire(function() return require(c.Modules.Game.Emotes.EmotesUI) end)
+m = _safeRequire(function() return require(c.Modules.Game.Emotes.EmotesList) end)
+n = _safeRequire(function() return require(c.Modules.Core.UI) end)
+o = _safeRequire(function() return require(c.Modules.Core.Char) end)
 if not j then j = { tween = function() return { Cancel = function() end } end } end
 if not k then k = { get = function() return nil end } end
 if not l then l = { current_emote_playing = { get = function() return nil end, set = function() end, hook = function() end }, enabled = { set = function() end } } end
 if not m then m = {} end
 if not n then n = { get = function() return workspace end, on_click = function() end } end
 if not o then o = { get_hum = function() return nil end, current_char = { get = function() return nil end } } end
-local p = _safeWait(c, "Items", 15)
+p = _safeWait(c, "Items", 15)
 if not p then p = Instance.new("Folder"); p.Name = "Items" end
-local q = _safeWait(p, "melee", 5)
+q = _safeWait(p, "melee", 5)
 if not q then q = Instance.new("Folder"); q.Name = "melee" end
 
-local r = a.LocalPlayer
-local s = r.Character or r.CharacterAdded:Wait()
-local t = _safeWait(s, "Humanoid", 10) or s:FindFirstChildOfClass("Humanoid")
-local u = _safeWait(s, "HumanoidRootPart", 10) or s:FindFirstChild("HumanoidRootPart")
-local v = a.LocalPlayer
-local w = {}
-local x = _safeWait(workspace, "DroppedItems", 15)
+r = a.LocalPlayer
+s = r.Character or r.CharacterAdded:Wait()
+t = _safeWait(s, "Humanoid", 10) or s:FindFirstChildOfClass("Humanoid")
+u = _safeWait(s, "HumanoidRootPart", 10) or s:FindFirstChild("HumanoidRootPart")
+v = a.LocalPlayer
+w = {}
+x = _safeWait(workspace, "DroppedItems", 15)
 if not x then x = Instance.new("Folder"); x.Name = "DroppedItems" end
-local y = g.CurrentCamera
+y = g.CurrentCamera
 
 r:GetMouse()
 
-local z = d.TouchEnabled and not d.KeyboardEnabled
+z = d.TouchEnabled and not d.KeyboardEnabled
 
-local ObsidianLib
+ObsidianLib = nil
 pcall(function()
  ObsidianLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/Library.lua"))()
 end)
-local ObsidianThemeManager
+ObsidianThemeManager = nil
 pcall(function()
  ObsidianThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/main/addons/ThemeManager.lua"))()
 end)
 
-local _elementCounter = 0
-local function _genIdx()
+_elementCounter = 0
+function _genIdx()
  _elementCounter = _elementCounter + 1
  return "yup_el_" .. _elementCounter
 end
 
-local A
+A = nil
 if ObsidianLib then
  A = {}
 
@@ -265,7 +265,7 @@ if ObsidianLib then
  end
 end
 
-local B
+B = nil
 if A then
  pcall(function()
  local PurpleTheme = {
@@ -287,6 +287,7 @@ if A then
  ObsidianLib.Scheme.DestructiveColor = Color3.fromRGB(220, 38, 38)
  end)
 
+ local _winOk, _winErr = pcall(function()
  B = A:CreateWindow({
  Title = "SASWERE KINGX",
  Icon = "",
@@ -299,20 +300,17 @@ if A then
  Resizable = true,
  KeyCode = Enum.KeyCode.RightControl
  })
-
- B:EditOpenButton({
+ end)
+ if not B then
+ warn("[SASWERE KINGX] Error al crear la ventana: " .. tostring(_winErr))
+ pcall(function()
+ game.StarterGui:SetCore("SendNotification", {
  Title = "SASWERE KINGX",
- Icon = "",
- CornerRadius = UDim.new(0, 16),
- StrokeThickness = 2,
- Color = ColorSequence.new(
- Color3.fromHex("#1a1a1a"),
- Color3.fromRGB(181, 119, 176)
- ),
- OnlyMobile = false,
- Enabled = true,
- Draggable = true,
+ Text = "Error al crear el menu: " .. tostring(_winErr):sub(1, 80),
+ Duration = 8
  })
+ end)
+ end
 else
  pcall(function()
  game.StarterGui:SetCore("SendNotification", {
@@ -349,25 +347,41 @@ else
  }
 end
 
-local C = B.ConfigManager
-local D = C:CreateConfig("YupitacticoConfig")
+pcall(function()
+ B:EditOpenButton({
+ Title = "SASWERE KINGX",
+ Icon = "",
+ CornerRadius = UDim.new(0, 16),
+ StrokeThickness = 2,
+ Color = ColorSequence.new(
+ Color3.fromHex("#1a1a1a"),
+ Color3.fromRGB(181, 119, 176)
+ ),
+ OnlyMobile = false,
+ Enabled = true,
+ Draggable = true,
+ })
+end)
 
-local FarmCookingRunning = false
-local FarmQuickRunning = false
-local autoATMEnabled = false
-local autoFishingEnabled = false
-local omitirGiroEnabled = true
-local espItemsEnabled = false
-local espDropDistEnabled = false
-local espPickupBoxEnabled = false
+C = B.ConfigManager
+D = C:CreateConfig("YupitacticoConfig")
 
-local bf = B:Tab({Title = "Main", Icon = "house"})
-local aS = B:Tab({Title = "Automation", Icon = "repeat"})
-local aN = B:Tab({Title = "Combat", Icon = "swords"})
-local VehicleTab = B:Tab({Title = "Teleports", Icon = "map-pin"})
-local aW = B:Tab({Title = "Visuals", Icon = "eye"})
-local a1 = bf
-local bk = B:Tab({Title = "Settings", Icon = "settings"})
+FarmCookingRunning = false
+FarmQuickRunning = false
+autoATMEnabled = false
+autoFishingEnabled = false
+omitirGiroEnabled = true
+espItemsEnabled = false
+espDropDistEnabled = false
+espPickupBoxEnabled = false
+
+bf = B:Tab({Title = "Main", Icon = "house"})
+aS = B:Tab({Title = "Automation", Icon = "repeat"})
+aN = B:Tab({Title = "Combat", Icon = "swords"})
+VehicleTab = B:Tab({Title = "Teleports", Icon = "map-pin"})
+aW = B:Tab({Title = "Visuals", Icon = "eye"})
+a1 = bf
+bk = B:Tab({Title = "Settings", Icon = "settings"})
 
 pcall(function()
  if ObsidianThemeManager and bk and bk._tab then
@@ -393,20 +407,20 @@ pcall(function()
  end
 end)
 
-local E
+E = nil
 pcall(function()
  E = c:WaitForChild("Remotes", 5):WaitForChild("Send", 5)
 end)
 
-local F = false
-local G = false
-local H = 400
-local I
-local J
-local _fovLastVisible = false
-local _fovLastRadius = 400
+F = false
+G = false
+H = 400
+I = nil
+J = nil
+_fovLastVisible = false
+_fovLastRadius = 400
 
-local SilentAimTargetPart = "head"
+SilentAimTargetPart = "head"
 
 task.spawn(function()
  while true do
@@ -420,13 +434,32 @@ task.spawn(function()
  end
 end)
 
-local K = Drawing.new("Line")
+_DrawingNew = nil
+pcall(function()
+ if type(Drawing) == "table" or type(Drawing) == "userdata" then
+  _DrawingNew = Drawing.new
+ end
+end)
+if not _DrawingNew then
+ local _dMT = {
+  __index = function(t, k)
+   if k == "Remove" then return function() end end
+   return nil
+  end,
+  __newindex = function(t, k, v) rawset(t, k, v) end,
+ }
+ _DrawingNew = function(kind)
+  return setmetatable({}, _dMT)
+ end
+end
+
+K = _DrawingNew("Line")
 K.Thickness = 1
 K.Color = Color3.fromRGB(255, 50, 50)
 K.Transparency = 1
 K.Visible = false
 
-local function _myTorsoScreenPos()
+function _myTorsoScreenPos()
  local okT, resT = pcall(function()
   local chT = r.Character
   local rootT = chT and chT:FindFirstChild("HumanoidRootPart")
@@ -442,7 +475,7 @@ local function _myTorsoScreenPos()
  return Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y / 2)
 end
 
-local function _myHeadScreenPos()
+function _myHeadScreenPos()
  local okH, resH = pcall(function()
  local chH = r.Character
  local headH = chH and chH:FindFirstChild("Head")
@@ -458,48 +491,48 @@ local function _myHeadScreenPos()
  return Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y / 2)
 end
 
-local L = {}
-local M = false
-local N = false
-local O = false
-local P = {}
-local tracerESPEnabled = false
-local Q = false
-local R = 0.05
-local S = false
-local T = false
-local U = 50
-local V = false
-local W = false
-local X
-local Y = 10
-local Z
-local _
-local aa
-local ab = state
-local ac = 0
-local ad = false
-local ae = 1
-local af = 0.4
-local ag = false
-local ah
+L = {}
+M = false
+N = false
+O = false
+P = {}
+tracerESPEnabled = false
+Q = false
+R = 0.05
+S = false
+T = false
+U = 50
+V = false
+W = false
+X = nil
+Y = 10
+Z = nil
+_ = nil
+aa = nil
+ab = state
+ac = 0
+ad = false
+ae = 1
+af = 0.4
+ag = false
+ah = nil
 
-local ai = getgenv or function() return _G end
+ai = getgenv or function() return _G end
 ai().Sky = false
 ai().SkyAmount = 1000
 
-local aj = true
-local ak = false
-local al = {}
-local am = -55
-local an = 30
-local ao = 0.1
-local ap = 20
-local aq = 0
-local ar = 0
-local as = false
+aj = true
+ak = false
+al = {}
+am = -55
+an = 30
+ao = 0.1
+ap = 20
+aq = 0
+ar = 0
+as = false
 
-local at = {
+at = {
  Common = Color3.fromRGB(255, 255, 255),
  Uncommon = Color3.fromRGB(99, 255, 52),
  Rare = Color3.fromRGB(51, 170, 255),
@@ -508,18 +541,18 @@ local at = {
  Omega = Color3.fromRGB(255, 20, 51)
 }
 
-local au = {}
-local av = {}
-local aw = false
-local ax
-local ay = false
-local az = {}
-local aA = 100
-local aB = {}
+au = {}
+av = {}
+aw = false
+ax = nil
+ay = false
+az = {}
+aA = 100
+aB = {}
 
-local highlightEnabled = false
-local highlights = {}
-local function createHighlight(character)
+highlightEnabled = false
+highlights = {}
+function createHighlight(character)
  local hl = Instance.new("Highlight")
  hl.Name = "PlayerHighlight"
  hl.FillColor = Color3.fromRGB(0, 255, 0)
@@ -529,7 +562,7 @@ local function createHighlight(character)
  hl.Parent = workspace
  return hl
 end
-local function updateHighlights()
+function updateHighlights()
  for plrH, hlH in pairs(highlights) do
   if not plrH.Parent or not plrH.Character then
    pcall(function() hlH:Destroy() end)
@@ -545,7 +578,7 @@ local function updateHighlights()
  end
 end
 
-local aC
+aC = nil
 pcall(function()
  for aD, aE in ipairs(getgc(true)) do
  if typeof(aE) == "table" and rawget(aE, "event") and rawget(aE, "func") then
@@ -554,7 +587,7 @@ pcall(function()
  end
  end
 end)
-local function getPing()
+function getPing()
  local aD = r:FindFirstChild("PlayerGui")
  if not aD then return 0.2 end
 
@@ -575,7 +608,7 @@ local function getPing()
 
  return aI
 end
-local function isPlayerExcluded(aD)
+function isPlayerExcluded(aD)
  for aE, aF in ipairs(P) do
  if aF ~= "" and string.find(string.lower(aD), string.lower(aF)) then
  return true
@@ -583,7 +616,7 @@ local function isPlayerExcluded(aD)
  end
  return false
 end
-local function getClosestTarget()
+function getClosestTarget()
  local aD
  local aE = H
  local aF = Vector2.new(y.ViewportSize.X / 2, y.ViewportSize.Y / 2)
@@ -612,7 +645,7 @@ local function getClosestTarget()
 
  return aD
 end
-local function predictPosition(aD, aE)
+function predictPosition(aD, aE)
  if not aD then return Vector3.zero end
 
  local aF = (getPing and getPing()) or (game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() / 1000)
@@ -621,10 +654,10 @@ local function predictPosition(aD, aE)
  local aG = (aE and aE.AssemblyLinearVelocity) or Vector3.zero
  return aD.Position + (aG * aF * 1)
 end
-local function isBehindWall(aD, aE)
+function isBehindWall(aD, aE)
  return false
 end
-local function setupCharacter(aD)
+function setupCharacter(aD)
  s = aD
  t = aD:WaitForChild("Humanoid", 10) or aD:FindFirstChildOfClass("Humanoid")
  u = aD:WaitForChild("HumanoidRootPart", 10) or aD:FindFirstChild("HumanoidRootPart")
@@ -643,7 +676,7 @@ local function setupCharacter(aD)
  end
  end)
 end
-local _antiKill = {
+_antiKill = {
  enabled = false,
  deathCFrame = nil,
  savedCameraType = nil,
@@ -654,17 +687,17 @@ local _antiKill = {
  snap = { pos = nil, flickering = false },
 }
 
-local function isDowned()
+function isDowned()
  local hum = o.get_hum()
  if not hum or hum.Health <= 0 then return false end
  return hum:GetAttribute("HasBeenDowned") or hum:GetAttribute("IsDead")
 end
-local function getHRP()
+function getHRP()
  local char = o.current_char.get()
  if not char then return end
  return char:FindFirstChild("HumanoidRootPart")
 end
-local function teleportUnderground()
+function teleportUnderground()
  local root = getHRP()
  if not root then return end
  _antiKill.snap.pos = root.CFrame + Vector3.new(0, -40, 0)
@@ -673,7 +706,7 @@ local function teleportUnderground()
  _antiKill.deathCFrame = root.CFrame + Vector3.new(0, 40, 0)
  end
 end
-local function flickerAndMove()
+function flickerAndMove()
  if _antiKill.snap.flickering then return end
  _antiKill.snap.flickering = true
  task.spawn(function()
@@ -694,7 +727,7 @@ local function flickerAndMove()
  end)
 end
 
-local function stopAntiKillRender()
+function stopAntiKillRender()
  if _antiKill.renderConn then
  pcall(function() _antiKill.renderConn:Disconnect() end)
  _antiKill.renderConn = nil
@@ -714,7 +747,7 @@ local function stopAntiKillRender()
  _antiKill.snap.flickering = false
 end
 
-local function startAntiKillRender()
+function startAntiKillRender()
  if _antiKill.renderConn then return end
  pcall(function() _antiKill.savedCameraType = y.CameraType end)
  _antiKill.yaw = 0
@@ -734,7 +767,7 @@ local function startAntiKillRender()
  end)
  end)
 end
-local function NetGet(...)
+function NetGet(...)
  if not aC or not aC.func then return end
 
  local aD = {...}
@@ -769,7 +802,7 @@ local function NetGet(...)
 
  return aF
 end
-local function CheckAndPickup()
+function CheckAndPickup()
  if not ak then return end
 
  local aD = g:FindFirstChild("DroppedItems")
@@ -799,13 +832,13 @@ local function CheckAndPickup()
  end
  end
 end
-local function SafeCall(aD, ...)
+function SafeCall(aD, ...)
  local aE, aF = pcall(aD, ...)
  return aE, aF
 end
 
-local aD = table.unpack or unpack
-local function CallRemote(aE, ...)
+aD = table.unpack or unpack
+function CallRemote(aE, ...)
  if not aE then return end
 
  local aF = {...}
@@ -844,7 +877,7 @@ local function CallRemote(aE, ...)
  end, aD(aF))
  end
 end
-local function getPlayersInRange(aE)
+function getPlayersInRange(aE)
  local aF = {}
  local aG = r.Character
  if not aG or not aG.PrimaryPart then return aF end
@@ -864,7 +897,7 @@ local function getPlayersInRange(aE)
 
  return aF
 end
-local function getActiveTool()
+function getActiveTool()
  local aE = r and r.Character
  if aE then
  for aF, aG in ipairs(aE:GetChildren()) do
@@ -885,7 +918,7 @@ local function getActiveTool()
 
  return nil
 end
-local function isMeleeTool(aE)
+function isMeleeTool(aE)
  if not aE then return false end
  if aE.Name == "Fists" then return true end
 
@@ -900,7 +933,7 @@ local function isMeleeTool(aE)
 
  return false
 end
-local function AttackNearby()
+function AttackNearby()
  if not E then return end
 
  local aE = r.Character
@@ -948,8 +981,8 @@ local function AttackNearby()
  end)
 end
 
-local aE = false
-local function StartAutoAttack()
+aE = false
+function StartAutoAttack()
  if aE then return end
  aE = true
 
@@ -962,9 +995,9 @@ local function StartAutoAttack()
  end
  end)
 end
-local function createNeonEffectAtPosition(aF, aG)
+function createNeonEffectAtPosition(aF, aG)
 end
-local function performTeleport()
+function performTeleport()
  if not u then return end
 
  local aF = u.Position
@@ -982,7 +1015,7 @@ local function performTeleport()
  createNeonEffectAtPosition(aF, 1.5)
  createNeonEffectAtPosition(aG, 2)
 end
-local function toggleTeleport()
+function toggleTeleport()
  if not W then return end
  V = not V
  if V then
@@ -992,8 +1025,8 @@ local function toggleTeleport()
  end
 end
 
-local aF
-local function lockYPosition()
+aF = nil
+function lockYPosition()
  if aF then
  pcall(function()
  aF:Disconnect()
@@ -1009,7 +1042,7 @@ local function lockYPosition()
  end
  end)
 end
-local function registerItems(aG)
+function registerItems(aG)
  for aH, aI in ipairs(aG:GetChildren()) do
  if aI:IsA("Tool") then
  local aJ = aI:FindFirstChild("Handle")
@@ -1049,7 +1082,7 @@ local function registerItems(aG)
  end
  end
 end
-local function getItemKey(aG)
+function getItemKey(aG)
  local aH = aG:FindFirstChild("Handle")
  local aI = aG:GetAttribute("DisplayName") or aG.Name
  local aJ = aG:GetAttribute("ItemId") or aG:GetAttribute("Id") or aG.Name
@@ -1070,12 +1103,12 @@ local function getItemKey(aG)
 
  return "NAME_" .. aI .. "_" .. aG.Name .. "_RARITY_" .. aK
 end
-local function getWeaponInfo(aG)
+function getWeaponInfo(aG)
  if not aG or not aG:IsA("Tool") then return nil end
  local aH = getItemKey(aG)
  return au[aH]
 end
-local function createBillboardForPlayer(aG)
+function createBillboardForPlayer(aG)
  if not aw or aG == r then return end
 
  local aH = aG.Character
@@ -1140,13 +1173,13 @@ local function createBillboardForPlayer(aG)
 
  av[aG] = aJ
 end
-local function setFinishPrompt(aG)
+function setFinishPrompt(aG)
  if aG and aG:IsA("ProximityPrompt") then
  aG.HoldDuration = ae
  aG.MaxActivationDistance = 20
  end
 end
-local function tryHoldPrompt(aG, aH)
+function tryHoldPrompt(aG, aH)
  if not aG or aG:GetAttribute("__AutoFinishBusy") then return end
 
  aG:SetAttribute("__AutoFinishBusy", true)
@@ -1172,7 +1205,7 @@ local function tryHoldPrompt(aG, aH)
 
  aG:SetAttribute("__AutoFinishBusy", nil)
 end
-local function findFinishPrompts()
+function findFinishPrompts()
  local aG = {}
 
  for aH, aI in pairs(workspace:GetChildren()) do
@@ -1191,7 +1224,7 @@ local function findFinishPrompts()
 
  return aG
 end
-local function applyToAll()
+function applyToAll()
  for aG, aH in ipairs(a:GetPlayers()) do
  if aH ~= r and aH.Character then
  local aI = aH.Character:FindFirstChild("HumanoidRootPart")
@@ -1204,7 +1237,7 @@ local function applyToAll()
  end
  end
 end
-local function setupFastFinishForPlayer(aG)
+function setupFastFinishForPlayer(aG)
  if aG ~= r then
  aG.CharacterAdded:Connect(function(aH)
  aH.DescendantAdded:Connect(function(aI)
@@ -1240,7 +1273,7 @@ local function setupFastFinishForPlayer(aG)
  end
  end
 end
-local function TrySkipCrate()
+function TrySkipCrate()
  local aG, aH = pcall(function()
  return require(c.Modules.Game.CrateSystem.Crate)
  end)
@@ -1265,7 +1298,7 @@ local function TrySkipCrate()
  end
  end)
 end
-local function SetupAutoSkip()
+function SetupAutoSkip()
  local aG = c:WaitForChild("Remotes", 5)
  if not aG then return end
 
@@ -1278,17 +1311,17 @@ local function SetupAutoSkip()
  end
  end)
 end
-local function createESP(aG)
+function createESP(aG)
  if L[aG] then return end
 
- local aH = Drawing.new("Text")
+ local aH = _DrawingNew("Text")
  aH.Size = 16
  aH.Center = true
  aH.Outline = true
  aH.Color = isPlayerExcluded(aG.Name) and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 255, 255)
  aH.Font = 4
 
- local aI = Drawing.new("Text")
+ local aI = _DrawingNew("Text")
  aI.Size = 14
  aI.Center = true
  aI.Outline = true
@@ -1296,13 +1329,13 @@ local function createESP(aG)
  aI.Font = 4
 
  local function makeBarPair()
- local bg = Drawing.new("Square")
+ local bg = _DrawingNew("Square")
  bg.Filled = false
  bg.Thickness = 1
  bg.Color = Color3.fromRGB(0, 0, 0)
  bg.Transparency = 0.9
  bg.Visible = false
- local fill = Drawing.new("Square")
+ local fill = _DrawingNew("Square")
  fill.Filled = true
  fill.Transparency = 0.9
  fill.Visible = false
@@ -1311,7 +1344,7 @@ local function createESP(aG)
 
  local barBg, barFill = makeBarPair()
 
- local tracerLine = Drawing.new("Line")
+ local tracerLine = _DrawingNew("Line")
  tracerLine.Thickness = 2
  tracerLine.Color = Color3.fromRGB(255, 255, 255)
  tracerLine.Transparency = 1
@@ -1464,7 +1497,7 @@ local function createESP(aG)
 
  L[aG] = {conn = aM, drawings = aL}
 end
-local function loadESP()
+function loadESP()
  for aG, aH in pairs(a:GetPlayers()) do
  if aH ~= r and not L[aH] then
  createESP(aH)
@@ -1504,7 +1537,7 @@ local function loadESP()
  end)
 end
 if not z then
- J = Drawing.new("Circle")
+ J = _DrawingNew("Circle")
  J.Color = Color3.fromRGB(255, 255, 255)
  J.Thickness = 2
  J.NumSides = 64
@@ -1535,13 +1568,13 @@ else
 
  J.Parent = aG
 end
-local aG = 6
-local aH = 1.2
-local aI = 150
-local aJ = 0.75
-local aK = {}
-local aL = Vector3.new()
-local tracerColorCycle = 0
+aG = 6
+aH = 1.2
+aI = 150
+aJ = 0.75
+aK = {}
+aL = Vector3.new()
+tracerColorCycle = 0
 
 b.Heartbeat:Connect(function()
  for aM, aN in ipairs(a:GetPlayers()) do
@@ -1567,7 +1600,7 @@ end)
 a.PlayerRemoving:Connect(function(aM)
  aK[aM] = nil
 end)
-local function calculateVelocity(aM)
+function calculateVelocity(aM)
  local aN = aK[aM]
  if not aN or #aN < 2 then return Vector3.new() end
 
@@ -1591,7 +1624,7 @@ local function calculateVelocity(aM)
 
  return aQ
 end
-local function predictPosition(aM, aN)
+function predictPosition2(aM, aN)
  if not aM then return Vector3.zero end
 
  local aO = aM.Parent
@@ -1605,7 +1638,7 @@ local function predictPosition(aM, aN)
 
  return aM.Position + (aQ * aR * aH)
 end
-local function isShotgun()
+function isShotgun()
  if not s then return false end
 
  for aM, aN in ipairs(s:GetChildren()) do
@@ -1619,7 +1652,7 @@ local function isShotgun()
 
  return false
 end
-local aM
+aM = nil
 if E and E.FireServer then
  local aN = pcall(function()
  aM = hookfunction(E.FireServer, function(aN, ...)
@@ -1636,7 +1669,7 @@ if E and E.FireServer then
  local aTORSO = I.Character and (I.Character:FindFirstChild("UpperTorso") or I.Character:FindFirstChild("Torso") or aQ)
 
  if aP and aQ and aR then
- local aS = predictPosition(aP, aQ)
+ local aS = predictPosition2(aP, aQ)
  local aT = r.Character and r.Character:FindFirstChild("Head")
  local aU = aT and aT.Position or nil
 
@@ -1706,7 +1739,7 @@ if E and E.FireServer then
  })
  end
  else
- local torsoPos = predictPosition(aTORSO, aQ)
+ local torsoPos = predictPosition2(aTORSO, aQ)
  for i = 1, 8 do
  local torsoOffset = Vector3.new(
  math.random(-0.3, 0.3),
@@ -1987,11 +2020,11 @@ b.Heartbeat:Connect(function()
  end
  pcall(CheckAndPickup)
 end)
-local _jumpHolding = false
-local _jumpFlySpeed = 50
-local _jumpConns = {}
+_jumpHolding = false
+_jumpFlySpeed = 50
+_jumpConns = {}
 
-local function stopHighJump()
+function stopHighJump()
  for _, c in ipairs(_jumpConns) do
  pcall(function() c:Disconnect() end)
  end
@@ -2007,7 +2040,7 @@ local function stopHighJump()
  end
 end
 
-local function setupHighJump(char)
+function setupHighJump(char)
  if not S then return end
  stopHighJump()
  local humanoid = char:WaitForChild("Humanoid", 10) or char:FindFirstChildOfClass("Humanoid")
@@ -2613,7 +2646,16 @@ aS:Toggle({
 
 aS:Section({Title = "FARM:"})
 
-local VIM = game:GetService("VirtualInputManager")
+local VIM
+pcall(function()
+ VIM = game:GetService("VirtualInputManager")
+end)
+if not VIM then
+ VIM = {
+ SendKeyEvent = function() end,
+ SendMouseButtonEvent = function() end,
+ }
+end
 local fcTweenService = game:GetService("TweenService")
 FarmCookingRunning = false
 local FC_CurrentTween = nil
@@ -5246,7 +5288,7 @@ b.RenderStepped:Connect(function()
  local model = visible[i].item
  local data = w[model]
  if not data then
- data = { name = Drawing.new("Text"), box = Drawing.new("Square") }
+ data = { name = _DrawingNew("Text"), box = _DrawingNew("Square") }
  data.name.Outline = true
  data.name.OutlineColor = Color3.fromRGB(0, 0, 0)
  data.name.Center = true
@@ -5389,7 +5431,7 @@ VehicleTab:Button({
 VehicleTab:Divider()
 
 VehicleTab:Section({Title = "Car Guard"})
-local function getMyVehicle()
+function getMyVehicle()
  local client = game.Players.LocalPlayer
  local vehicles = workspace:FindFirstChild("Vehicles")
  if not vehicles then return nil end
