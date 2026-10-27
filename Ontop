@@ -7,23 +7,51 @@ local f = game:GetService("Debris")
 local g = game:GetService("Workspace")
 local h = game:GetService("ContextActionService")
 
-local i = c:WaitForChild("Remotes")
-local j = require(c.Modules.Core.Util)
-local k = require(c.Modules.Game.UI.BuyPromptUI)
-local l = require(c.Modules.Game.Emotes.EmotesUI)
-local m = require(c.Modules.Game.Emotes.EmotesList)
-local n = require(c.Modules.Core.UI)
-local o = require(c.Modules.Core.Char)
-local p = c:WaitForChild("Items")
-local q = p:WaitForChild("melee")
+local function _safeWait(parent, name, timeout)
+ local ok, res = pcall(function()
+  return parent:WaitForChild(name, timeout)
+ end)
+ if ok and res then return res end
+ return nil
+end
+local function _safeRequire(fn)
+ local ok, res = pcall(fn)
+ if ok and type(res) == "table" then return res end
+ return nil
+end
+local i = _safeWait(c, "Remotes", 15)
+if not i then
+ i = Instance.new("Folder")
+ i.Name = "Remotes"
+ local _dSend = Instance.new("RemoteEvent")
+ _dSend.Name = "Send"
+ _dSend.Parent = i
+end
+local j = _safeRequire(function() return require(c.Modules.Core.Util) end)
+local k = _safeRequire(function() return require(c.Modules.Game.UI.BuyPromptUI) end)
+local l = _safeRequire(function() return require(c.Modules.Game.Emotes.EmotesUI) end)
+local m = _safeRequire(function() return require(c.Modules.Game.Emotes.EmotesList) end)
+local n = _safeRequire(function() return require(c.Modules.Core.UI) end)
+local o = _safeRequire(function() return require(c.Modules.Core.Char) end)
+if not j then j = { tween = function() return { Cancel = function() end } end } end
+if not k then k = { get = function() return nil end } end
+if not l then l = { current_emote_playing = { get = function() return nil end, set = function() end, hook = function() end }, enabled = { set = function() end } } end
+if not m then m = {} end
+if not n then n = { get = function() return workspace end, on_click = function() end } end
+if not o then o = { get_hum = function() return nil end, current_char = { get = function() return nil end } } end
+local p = _safeWait(c, "Items", 15)
+if not p then p = Instance.new("Folder"); p.Name = "Items" end
+local q = _safeWait(p, "melee", 5)
+if not q then q = Instance.new("Folder"); q.Name = "melee" end
 
 local r = a.LocalPlayer
 local s = r.Character or r.CharacterAdded:Wait()
-local t = s:WaitForChild("Humanoid")
-local u = s:WaitForChild("HumanoidRootPart")
+local t = _safeWait(s, "Humanoid", 10) or s:FindFirstChildOfClass("Humanoid")
+local u = _safeWait(s, "HumanoidRootPart", 10) or s:FindFirstChild("HumanoidRootPart")
 local v = a.LocalPlayer
 local w = {}
-local x = workspace:WaitForChild("DroppedItems")
+local x = _safeWait(workspace, "DroppedItems", 15)
+if not x then x = Instance.new("Folder"); x.Name = "DroppedItems" end
 local y = g.CurrentCamera
 
 r:GetMouse()
@@ -286,6 +314,14 @@ if A then
  Draggable = true,
  })
 else
+ pcall(function()
+ game.StarterGui:SetCore("SendNotification", {
+ Title = "SASWERE KINGX",
+ Text = "Error al cargar la libreria. Revisa tu internet o usa otro executor.",
+ Duration = 8
+ })
+ end)
+ warn("[SASWERE KINGX] No se pudo cargar Obsidian Library. Revisa tu conexion o ejecuta de nuevo.")
  B = {
  Tab = function(C)
  return {
@@ -590,8 +626,8 @@ local function isBehindWall(aD, aE)
 end
 local function setupCharacter(aD)
  s = aD
- t = aD:WaitForChild("Humanoid")
- u = aD:WaitForChild("HumanoidRootPart")
+ t = aD:WaitForChild("Humanoid", 10) or aD:FindFirstChildOfClass("Humanoid")
+ u = aD:WaitForChild("HumanoidRootPart", 10) or aD:FindFirstChild("HumanoidRootPart")
 
  if _ then
  pcall(function()
@@ -722,8 +758,9 @@ local function NetGet(...)
 
  aC.func = (aC.func or 0) + 1
  local aE, aF = pcall(function()
- local aE = c:WaitForChild("Remotes"):WaitForChild("Get")
- return aE:InvokeServer(aC.func, unpack(aD))
+ local aE0 = c:WaitForChild("Remotes", 5)
+ local aE = aE0 and aE0:WaitForChild("Get", 5)
+ return aE and aE:InvokeServer(aC.func, unpack(aD))
  end)
 
  if not aE then
@@ -853,10 +890,11 @@ local function isMeleeTool(aE)
  if aE.Name == "Fists" then return true end
 
  local aF = game:GetService("ReplicatedStorage")
- local aG = aF:WaitForChild("Items"):WaitForChild("melee")
- local aH = aF:WaitForChild("Items"):WaitForChild("throwable")
+ local aItems = aF:WaitForChild("Items", 5)
+ local aG = aItems and aItems:WaitForChild("melee", 5)
+ local aH = aItems and aItems:WaitForChild("throwable", 5)
 
- if aG:FindFirstChild(aE.Name) and not aH:FindFirstChild(aE.Name) then
+ if aG and aH and aG:FindFirstChild(aE.Name) and not aH:FindFirstChild(aE.Name) then
  return true
  end
 
@@ -1945,7 +1983,7 @@ end)
 b.Heartbeat:Connect(function()
  if not r.Character or not r.Character:FindFirstChild("HumanoidRootPart") then
  s = r.Character or r.CharacterAdded:Wait()
- u = s:WaitForChild("HumanoidRootPart")
+ u = s:WaitForChild("HumanoidRootPart", 10) or s:FindFirstChild("HumanoidRootPart")
  end
  pcall(CheckAndPickup)
 end)
@@ -1972,8 +2010,8 @@ end
 local function setupHighJump(char)
  if not S then return end
  stopHighJump()
- local humanoid = char:WaitForChild("Humanoid")
- local hrp = char:WaitForChild("HumanoidRootPart")
+ local humanoid = char:WaitForChild("Humanoid", 10) or char:FindFirstChildOfClass("Humanoid")
+ local hrp = char:WaitForChild("HumanoidRootPart", 10) or char:FindFirstChild("HumanoidRootPart")
 
  h:BindAction("_HJ_FlyUp", function(_, inputState, inputObj)
  if not S then return Enum.ContextActionResult.Pass end
@@ -2040,7 +2078,7 @@ end)
 
 r.CharacterAdded:Connect(function(aN)
  s = aN
- u = aN:WaitForChild("HumanoidRootPart")
+ u = aN:WaitForChild("HumanoidRootPart", 10) or aN:FindFirstChild("HumanoidRootPart")
  X = nil
  V = false
  lockYPosition()
@@ -2058,7 +2096,9 @@ end)
 StartAutoAttack()
 
 for aN, aO in ipairs({"gun", "melee", "throwable", "consumable", "farming", "misc", "rod", "fish"}) do
- registerItems(c:WaitForChild("Items")[aO])
+ local aItems2 = _safeWait(c, "Items", 10)
+ local aFolder2 = aItems2 and aItems2:FindFirstChild(aO)
+ if aFolder2 then pcall(registerItems, aFolder2) end
 end
 
 a.PlayerAdded:Connect(function(aN)
@@ -2421,7 +2461,9 @@ do
 
 aS:Section({Title = "MODS:"})
 
-local aT = c:WaitForChild("Items"):WaitForChild("gun")
+local aT = _safeWait(c, "Items", 10)
+aT = aT and aT:WaitForChild("gun", 10)
+if not aT then aT = Instance.new("Folder"); aT.Name = "gun" end
 
 ai().FireRateValue = 1000
 ai().AccuracyValue = 1
@@ -4078,8 +4120,9 @@ local ba = a1:Toggle({
  if not bf then return end
  local function sendRemoteAction(bg)
  bf.event = (bf.event or 0) + 1
- local bh = bc:WaitForChild("Remotes"):WaitForChild("Send")
- bh:FireServer(bf.event, bg)
+ local bh1 = bc:WaitForChild("Remotes", 5)
+ local bh = bh1 and bh1:WaitForChild("Send", 5)
+ if bh then bh:FireServer(bf.event, bg) end
  end
  task.spawn(function()
  while bb do
@@ -4287,8 +4330,9 @@ local bc = a1:Toggle({
  if not bh then return end
  local function sendRemoteAction(bi)
  bh.event = (bh.event or 0) + 1
- local bj = be:WaitForChild("Remotes"):WaitForChild("Send")
- bj:FireServer(bh.event, bi)
+ local bj1 = be:WaitForChild("Remotes", 5)
+ local bj = bj1 and bj1:WaitForChild("Send", 5)
+ if bj then bj:FireServer(bh.event, bi) end
  end
  task.spawn(function()
  while bd do
@@ -4776,11 +4820,16 @@ local bn = bk:Button({
  function br.get(...)
  local bs = {...}
  bq.func = (bq.func or 0) + 1
- local bt = bo:WaitForChild("Remotes"):WaitForChild("Get")
- return bt:InvokeServer(bq.func, table.unpack(bs))
+ local bt0 = bo:WaitForChild("Remotes", 5)
+ local bt = bt0 and bt0:WaitForChild("Get", 5)
+ return bt and bt:InvokeServer(bq.func, table.unpack(bs))
  end
 
- local bs = bp:WaitForChild("PlayerGui"):WaitForChild("Quests"):WaitForChild("QuestsHolder"):WaitForChild("QuestsScrollingFrame")
+ local bs1 = bp:WaitForChild("PlayerGui", 5)
+ local bs2 = bs1 and bs1:WaitForChild("Quests", 5)
+ local bs3 = bs2 and bs2:WaitForChild("QuestsHolder", 5)
+ local bs = bs3 and bs3:WaitForChild("QuestsScrollingFrame", 5)
+ if not bs then return end
 
  for bt, bu in ipairs(bs:GetChildren()) do
  if bu:IsA("Frame") or bu:IsA("TextButton") or bu:IsA("ImageButton") then
@@ -5309,8 +5358,9 @@ VehicleTab:Button({
  local Players = game:GetService("Players")
  local Client = Players.LocalPlayer
  local Character = Client.Character or Client.CharacterAdded:Wait()
- local RootPart = Character:WaitForChild("HumanoidRootPart")
- local Vehicles = workspace:WaitForChild("Vehicles")
+ local RootPart = Character:WaitForChild("HumanoidRootPart", 5)
+ local Vehicles = workspace:WaitForChild("Vehicles", 5)
+ if not RootPart or not Vehicles then return end
 
  for _, vehicle in pairs(Vehicles:GetChildren()) do
  if vehicle:IsA("Model") then
