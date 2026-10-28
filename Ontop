@@ -379,7 +379,7 @@ bf = B:Tab({Title = "Main", Icon = "house"})
 aS = B:Tab({Title = "Automation", Icon = "repeat"})
 aN = B:Tab({Title = "Combat", Icon = "swords"})
 VehicleTab = B:Tab({Title = "Teleports", Icon = "map-pin"})
-TagTab = B:Tab({Title = "Tag", Icon = "tag"})
+aW = B:Tab({Title = "Visuals", Icon = "eye"})
 a1 = bf
 bk = B:Tab({Title = "Settings", Icon = "settings"})
 
@@ -2676,6 +2676,10 @@ local FC_CIRCLE_WAIT = 12
 local FC_CLICK_WAIT = 3
 local FC_CIRCLE_CLICK_AT = 10
 local FC_CLICK_DOWN_Y = 0.7
+local FC_CLICK6_OFF_X = 0
+local FC_CLICK6_OFF_Y = 55
+local FC_CIRCLE_OFF_X = -45
+local FC_CIRCLE_OFF_Y = 50
 local FC_AVOID_DIST = 12
 local FC_TP_JUMP = 30
 local FC_TP_PAUSE = 4
@@ -2958,11 +2962,13 @@ local function fcTweenToCircle(pos)
  return fcTweenSegment(pos)
 end
 
-local function fcClickAt(yFactor)
+local function fcClickAt(yFactor, offX, offY)
+ local ox = offX or 0
+ local oy = offY or 0
  local ok = pcall(function()
  local cam = workspace.CurrentCamera
- local x = cam.ViewportSize.X / 2
- local y = cam.ViewportSize.Y * yFactor
+ local x = cam.ViewportSize.X / 2 + ox
+ local y = cam.ViewportSize.Y * yFactor + oy
  VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
  task.wait(0.05)
  VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
@@ -2971,15 +2977,15 @@ local function fcClickAt(yFactor)
  pcall(function()
  if type(mousemoveabs) == "function" then
  local cam = workspace.CurrentCamera
- mousemoveabs(cam.ViewportSize.X / 2, cam.ViewportSize.Y * yFactor)
+ mousemoveabs(cam.ViewportSize.X / 2 + ox, cam.ViewportSize.Y * yFactor + oy)
  end
  mouse1click()
  end)
  end
 end
 
-local function fcClickCenter()
- fcClickAt(0.5)
+local function fcClickCenter(offX, offY)
+ fcClickAt(0.5, offX, offY)
 end
 
 local function fcBlueDominant(c)
@@ -3194,7 +3200,7 @@ local function fcStayAtCircle(pos, segundos, forzar)
 
  if not clicked and elapsed >= FC_CIRCLE_CLICK_AT then
  clicked = true
- fcClickAt(FC_CLICK_DOWN_Y)
+ fcClickAt(FC_CLICK_DOWN_Y, FC_CIRCLE_OFF_X, FC_CIRCLE_OFF_Y)
  end
  task.wait(0.25)
  end
@@ -3250,7 +3256,7 @@ local function farmCookingLoop()
  end
  if action == "click" and FarmCookingRunning then
  task.wait(FC_CLICK_WAIT)
- fcClickCenter()
+ fcClickCenter(FC_CLICK6_OFF_X, FC_CLICK6_OFF_Y)
  end
  end
  end
@@ -3266,7 +3272,7 @@ end
 local quickToggleRef = nil
 local fcToggle = aS:Toggle({
  Title = "Farm Cooking",
- Desc = "Tween glide. SIEMPRE va al circulo azul (nunca lo esquiva ni lo salta) y se queda SOBRE el 12s, click centro-abajo al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click centro. Ignora botes de basura. Si detecta TP se pausa 4s y sigue. Esquiva obstaculos al ir lejos; al llegar a las coordenadas (circulo/E) entra DIRECTO.",
+ Desc = "Tween glide. SIEMPRE va al circulo azul (nunca lo esquiva ni lo salta) y se queda SOBRE el 12s, click centro-abajo-lado al segundo 10, luego va a la E y agarra, y lo hace de nuevo. Punto 6: 3s + click un poco abajo. Ignora botes de basura. Si detecta TP se pausa 4s y sigue. Esquiva obstaculos al ir lejos; al llegar a las coordenadas (circulo/E) entra DIRECTO.",
  Default = false,
  Callback = function(v)
  FarmCookingRunning = v
@@ -3361,6 +3367,17 @@ end)
 
 local QK_TWEEN_SERVICE = e
 local QK_TWEEN_ACTUAL = nil
+local QK_TP_PAUSE_UNTIL = 0
+
+local function QK_enPausaTP()
+ return os.clock() < QK_TP_PAUSE_UNTIL
+end
+
+local function QK_esperarTP()
+ while FarmQuickRunning and os.clock() < QK_TP_PAUSE_UNTIL do
+  task.wait(0.2)
+ end
+end
 
 _G.MM2 = _G.MM2 or {}
 _G.MM2.rutaSpeed = _G.MM2.rutaSpeed or 38
@@ -3382,8 +3399,8 @@ end
 local QK_INICIO = {
  { cf = QK_CF(160.618103, 255.871048, 221.832321, 0.999603748, 2.47672372e-09, -0.0281478968, -2.59720623e-09, 1, -4.24377777e-09) },
  { cf = QK_CF(159.951706, 255.315033, 208.243896, 0.999142408, -3.56985055e-08, 0.0414060093, 3.95551218e-08, 1, -9.23221961e-08) },
- { cf = QK_CF(164.335922, 255.315033, 203.417938, 0.613869429, 5.39133582e-09, -0.789407551, 5.75457237e-09, 1, 1.13045431e-08), e = 3 },
- { cf = QK_CF(149.315292, 256.204132, 212.527847, -0.99988395, 1.49472239e-08, -0.0152352843, 1.50811204e-08, 1, -8.67361294e-09) },
+ { cf = QK_CF(164.335922, 255.315033, 203.417938, 0.613869429, 5.39133582e-09, -0.789407551, 5.75457237e-09, 1, 1.13045431e-08), espera = 3, clickBajo = true, e = 3 },
+ { cf = QK_CF(149.315292, 256.204132, 212.527847, -0.99988395, 1.49472239e-08, -0.0152352843, 1.50811204e-08, 1, -8.67361294e-09), e = 3 },
 }
 
 local QK_PUNTO_CIRCULOS = Vector3.new(149.315292, 256.204132, 212.527847)
@@ -3421,17 +3438,31 @@ local function QK_cancelarTween()
 end
 
 local function QK_moverHacia(cf)
- local hrp = QK_obtenerHRP()
- if not hrp then return false end
- local distancia = (cf.Position - hrp.Position).Magnitude
- if distancia < 0.5 then return true end
- local duracion = math.max(distancia / math.max(_G.MM2.rutaSpeed, 1), 0.1)
- local tween = QK_TWEEN_SERVICE:Create(hrp, TweenInfo.new(duracion, Enum.EasingStyle.Linear), { CFrame = cf })
- QK_TWEEN_ACTUAL = tween
- tween:Play()
- local resultado = tween.Completed:Wait()
- QK_TWEEN_ACTUAL = nil
- return resultado == Enum.PlaybackState.Completed
+ local intentos = 0
+ while intentos < 20 do
+  intentos = intentos + 1
+  local hrp = QK_obtenerHRP()
+  if not hrp then return false end
+  QK_esperarTP()
+  if not FarmQuickRunning then return false end
+  hrp = QK_obtenerHRP()
+  if not hrp then return false end
+  local distancia = (cf.Position - hrp.Position).Magnitude
+  if distancia < 0.5 then return true end
+  local duracion = math.max(distancia / math.max(_G.MM2.rutaSpeed, 1), 0.1)
+  local tween = QK_TWEEN_SERVICE:Create(hrp, TweenInfo.new(duracion, Enum.EasingStyle.Linear), { CFrame = cf })
+  QK_TWEEN_ACTUAL = tween
+  tween:Play()
+  local resultado = tween.Completed:Wait()
+  QK_TWEEN_ACTUAL = nil
+  if resultado == Enum.PlaybackState.Completed then
+   return true
+  end
+  if not (FarmQuickRunning and os.clock() < QK_TP_PAUSE_UNTIL) then
+   return false
+  end
+ end
+ return false
 end
 
 local function QK_irAPuntoPos(pos)
@@ -3475,10 +3506,24 @@ end
 
 local function QK_esperarEnCirculo(part, segundos)
  local t0 = os.clock()
- while FarmQuickRunning and (os.clock() - t0) < segundos do
+ local pausaAcc = 0
+ local clicked = false
+ while FarmQuickRunning and (os.clock() - t0 - pausaAcc) < segundos do
+ if QK_enPausaTP() then
+ local pT0 = os.clock()
+ QK_esperarTP()
+ pausaAcc = pausaAcc + (os.clock() - pT0)
+ if not FarmQuickRunning then break end
+ end
  local hrp = QK_obtenerHRP()
  if hrp and part and part.Parent and (hrp.Position - part.Position).Magnitude > 8 then
  QK_irAPuntoPos(part.Position + Vector3.new(0, QK_ALTURA_CIRCULO, 0))
+ end
+ if not clicked and (os.clock() - t0 - pausaAcc) >= FC_CIRCLE_CLICK_AT then
+ clicked = true
+ pcall(function()
+ fcClickAt(FC_CLICK_DOWN_Y, FC_CIRCLE_OFF_X, FC_CIRCLE_OFF_Y)
+ end)
  end
  task.wait(0.5)
  end
@@ -3519,12 +3564,41 @@ local function QK_presionarE(veces)
  task.wait(QK_ESPERA_TRAS_E)
 end
 
-local function QK_clickEnMedio()
+local function QK_clickEnMedio(offX, offY)
  pcall(function()
- fcClickCenter()
+ fcClickCenter(offX, offY)
  end)
  task.wait(0.3)
 end
+
+task.spawn(function()
+ local lastPTQ = nil
+ while true do
+ task.wait(0.1)
+ if FarmQuickRunning then
+ local hrpTQ = QK_obtenerHRP()
+ if hrpTQ then
+ local pTQ = hrpTQ.Position
+ if lastPTQ and (pTQ - lastPTQ).Magnitude > FC_TP_JUMP then
+ QK_TP_PAUSE_UNTIL = os.clock() + FC_TP_PAUSE
+ pcall(function()
+ if QK_TWEEN_ACTUAL then QK_TWEEN_ACTUAL:Cancel() end
+ end)
+ pcall(function()
+ local humTQ = hrpTQ.Parent and hrpTQ.Parent:FindFirstChildOfClass("Humanoid")
+ if humTQ then humTQ:MoveTo(hrpTQ.Position) end
+ end)
+ if A then A:Notify({Title = "Farm Quick 11", Description = "TP detectado: pausa " .. FC_TP_PAUSE .. "s", Duration = 2}) end
+ end
+ lastPTQ = pTQ
+ else
+ lastPTQ = nil
+ end
+ else
+ lastPTQ = nil
+ end
+ end
+end)
 
 task.spawn(function()
  while true do
@@ -3545,6 +3619,12 @@ task.spawn(function()
  for i, wp in ipairs(QK_INICIO) do
  if not FarmQuickRunning then return end
  if not QK_moverHacia(wp.cf) then return end
+ if wp.espera then
+ task.wait(wp.espera)
+ end
+ if wp.clickBajo then
+ QK_clickEnMedio(FC_CLICK6_OFF_X, FC_CLICK6_OFF_Y)
+ end
  if wp.e then
  QK_presionarE(wp.e)
  end
@@ -3553,6 +3633,8 @@ task.spawn(function()
  if hacerCirculos then
  for rep = 1, QK_VECES_SECENCIA do
  if not FarmQuickRunning then return end
+ if not QK_moverHacia(QK_INICIO[4].cf) then return end
+ QK_presionarE(3)
  local circulo = QK_buscarCirculoAzul(QK_PUNTO_CIRCULOS)
  if circulo then
  if not QK_irAPuntoPos(circulo.Position + Vector3.new(0, QK_ALTURA_CIRCULO, 0)) then return end
@@ -3595,7 +3677,7 @@ end)
 
 local quickToggle = aS:Toggle({
  Title = "Farm Quick 11",
- Desc = "Ruta grabada con movimiento macro (tween a CFrame completo, velocidad _G.MM2.rutaSpeed). Empieza con 4 puntos (E x3 en el 3), luego circulo azul 12s -> punto -> E repetido 5 veces SOLO en la 1a vuelta, y el resto de la ruta con E x5 en el punto 6 (espera 3s + click en el medio). Repite toda la ruta.",
+ Desc = "Ruta grabada con movimiento macro (tween a CFrame completo, velocidad _G.MM2.rutaSpeed). 4 puntos: punto 3 espera 3s + click un poco abajo + E x3, punto 4 E x3. Luego 5 veces SOLO en la 1a vuelta: punto 4 E x3 -> circulo azul 12s con click al segundo 10 (abajo y al lado, como Farm Cooking) -> punto E y agarra. Resto de la ruta con espera 3s + click + E x5. Si detecta TP se pausa 4s y sigue (como Farm Cooking). Repite toda la ruta.",
  Default = false,
  Callback = function(v)
  if v then
@@ -4162,232 +4244,6 @@ local bb = a1:Toggle({
 })
 D:Register("HideName", bb)
 
-TagTab:Section({Title = "TAG:"})
-
-local tagActive = false
-local tagMode = "Con nombre"
-local tagTexto = "SASWERE KINGX"
-local tagMarks = {}
-local tagConns = {}
-
-local function tagClearOne(plr)
- local mk = tagMarks[plr]
- if mk then
-  pcall(function() mk:Destroy() end)
-  tagMarks[plr] = nil
- end
-end
-
-local function tagRestoreOne(plr)
- task.spawn(function()
-  pcall(function()
-   local ch = plr.Character
-   if not ch then return end
-   local hrp = ch:FindFirstChild("HumanoidRootPart")
-   if not hrp then return end
-   local bb = hrp:FindFirstChild("CharacterBillboardGui")
-   if bb then
-    local nl = bb:FindFirstChild("PlayerName")
-    if nl and nl:IsA("TextLabel") then
-     nl.Visible = true
-    end
-   end
-  end)
- end)
-end
-
-local function tagApplyOne(plr)
- if not tagActive then return end
- task.spawn(function()
-  pcall(function()
-   local ch = plr.Character
-   if not ch then return end
-   local hrp = ch:FindFirstChild("HumanoidRootPart") or ch:WaitForChild("HumanoidRootPart", 5)
-   if not hrp then return end
-   tagClearOne(plr)
-   if tagMode == "Sin nombre" then
-    local bb2 = hrp:FindFirstChild("CharacterBillboardGui")
-    if bb2 then
-     local nl2 = bb2:FindFirstChild("PlayerName")
-     if nl2 and nl2:IsA("TextLabel") then
-      nl2.Visible = false
-     end
-    end
-    return
-   end
-   local mk = Instance.new("BillboardGui")
-   mk.Name = "KingxTag"
-   mk.Adornee = hrp
-   mk.Size = UDim2.new(0, 260, 0, 44)
-   mk.StudsOffset = Vector3.new(0, 3.4, 0)
-   mk.AlwaysOnTop = true
-   mk.MaxDistance = 500
-   local lb = Instance.new("TextLabel")
-   lb.Name = "TagLabel"
-   lb.Size = UDim2.new(1, 0, 1, 0)
-   lb.BackgroundTransparency = 1
-   lb.Text = tagTexto
-   lb.TextColor3 = Color3.fromRGB(181, 119, 176)
-   lb.TextStrokeColor3 = Color3.new(0, 0, 0)
-   lb.TextStrokeTransparency = 0
-   lb.TextScaled = true
-   lb.Font = Enum.Font.GothamBold
-   lb.Parent = mk
-   mk.Parent = hrp
-   tagMarks[plr] = mk
-  end)
- end)
-end
-
-local function tagApplyAll()
- for _, plr in ipairs(a:GetPlayers()) do
-  if plr ~= r then
-   tagApplyOne(plr)
-  end
- end
-end
-
-local function tagClearAll()
- for _, plr in ipairs(a:GetPlayers()) do
-  tagClearOne(plr)
-  tagRestoreOne(plr)
- end
-end
-
-local tagRotThread = nil
-local tagNombreActual = "SASWERE KINGX"
-
-local function tagGetPool()
- local pool = {}
- if tagTexto and tagTexto ~= "" then
-  table.insert(pool, tagTexto)
- end
- pcall(function()
-  for _, plr in ipairs(a:GetPlayers()) do
-   if plr.Name and plr.Name ~= "" then
-    table.insert(pool, plr.Name)
-   end
-  end
- end)
- if #pool == 0 then
-  pool = {"SASWERE KINGX"}
- end
- return pool
-end
-
-local function tagPickName()
- local pool = tagGetPool()
- if #pool > 1 then
-  local nx = tagNombreActual
-  local guard = 0
-  while nx == tagNombreActual and guard < 10 do
-   nx = pool[math.random(1, #pool)]
-   guard = guard + 1
-  end
-  tagNombreActual = nx
- else
-  tagNombreActual = pool[1]
- end
- return tagNombreActual
-end
-
-local function tagStopRotation()
- if tagRotThread then
-  pcall(function() task.cancel(tagRotThread) end)
-  tagRotThread = nil
- end
-end
-
-local function tagStartRotation()
- tagStopRotation()
- tagRotThread = task.spawn(function()
-  while tagActive do
-   pcall(function()
-    local nx = tagPickName()
-    for _, plr in ipairs(a:GetPlayers()) do
-     local mk = tagMarks[plr]
-     if mk and mk.Parent then
-      local lb = mk:FindFirstChild("TagLabel")
-      if lb and lb:IsA("TextLabel") then
-       lb.Text = nx
-      end
-     end
-    end
-   end)
-   task.wait(0.2)
-  end
- end)
-end
-
-local tagToggle = TagTab:Toggle({
- Title = "Tag",
- Desc = "Pone el nombre sobre la cabeza de todos y lo cambia cada 0.2s",
- Default = false,
- Callback = function(state)
-  tagActive = state
-  for _, cn in ipairs(tagConns) do
-   pcall(function() cn:Disconnect() end)
-  end
-  tagConns = {}
-  if state then
-   tagApplyAll()
-   tagStartRotation()
-   table.insert(tagConns, a.PlayerAdded:Connect(function(plr)
-    task.wait(0.5)
-    tagApplyOne(plr)
-    table.insert(tagConns, plr.CharacterAdded:Connect(function()
-     task.wait(0.8)
-     tagApplyOne(plr)
-    end))
-   end))
-   for _, plr in ipairs(a:GetPlayers()) do
-    if plr ~= r then
-     table.insert(tagConns, plr.CharacterAdded:Connect(function()
-      task.wait(0.8)
-      tagApplyOne(plr)
-     end))
-    end
-   end
-   table.insert(tagConns, a.PlayerRemoving:Connect(function(plr)
-    tagClearOne(plr)
-   end))
-  else
-   tagStopRotation()
-   tagClearAll()
-  end
- end
-})
-D:Register("TagToggle", tagToggle)
-
-local tagModeDd = TagTab:Dropdown({
- Title = "Modo del Tag:",
- Desc = "Con nombre muestra el tag, Sin nombre oculta los nombres",
- Values = {"Con nombre", "Sin nombre"},
- Value = "Con nombre",
- Callback = function(val)
-  tagMode = val or "Con nombre"
-  if tagActive then
-   tagApplyAll()
-  end
- end
-})
-D:Register("TagMode", tagModeDd)
-
-local tagInput = TagTab:Input({
- Title = "Nombre del Tag:",
- Value = "SASWERE KINGX",
- Placeholder = "Escribe el nombre del tag...",
- Callback = function(val)
-  if val and val ~= "" then
-   tagTexto = val
-   if tagActive and tagMode == "Con nombre" then
-    tagApplyAll()
-   end
-  end
- end
-})
-D:Register("TagText", tagInput)
-
 local bc = a1:Toggle({
  Title = "Auto Respawn",
  Default = false,
@@ -4613,126 +4469,6 @@ local snapCarBtn = a1:Button({
  end
 })
 D:Register("SnapCar", snapCarBtn)
-
-local snapGuideEnabled = true
-local snapGuideGui = nil
-local snapGuideThread = nil
-
-local function snapGuideDestroy()
- if snapGuideThread then
-  pcall(function() task.cancel(snapGuideThread) end)
-  snapGuideThread = nil
- end
- if snapGuideGui then
-  pcall(function() snapGuideGui:Destroy() end)
-  snapGuideGui = nil
- end
-end
-
-local function snapGuideCreate()
- snapGuideDestroy()
- pcall(function()
-  local pg = r:FindFirstChildOfClass("PlayerGui") or r:WaitForChild("PlayerGui", 5)
-  if not pg then return end
-  local g = Instance.new("ScreenGui")
-  g.Name = "KingxSnapGuide"
-  g.ResetOnSpawn = false
-  g.DisplayOrder = 50
-  g.Parent = pg
-  local fr = Instance.new("Frame")
-  fr.Name = "Panel"
-  fr.AnchorPoint = Vector2.new(1, 0)
-  fr.Position = UDim2.new(1, -10, 0, 10)
-  fr.Size = UDim2.new(0, 226, 0, 138)
-  fr.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-  fr.BackgroundTransparency = 0.12
-  fr.BorderSizePixel = 0
-  fr.Active = false
-  fr.Parent = g
-  local uc = Instance.new("UICorner")
-  uc.CornerRadius = UDim.new(0, 8)
-  uc.Parent = fr
-  local st = Instance.new("UIStroke")
-  st.Color = Color3.fromRGB(181, 119, 176)
-  st.Thickness = 1.5
-  st.Parent = fr
-  local tt = Instance.new("TextLabel")
-  tt.Name = "Titulo"
-  tt.Size = UDim2.new(1, -16, 0, 22)
-  tt.Position = UDim2.new(0, 8, 0, 4)
-  tt.BackgroundTransparency = 1
-  tt.Text = "SNAP CAR - GUIA"
-  tt.TextColor3 = Color3.fromRGB(181, 119, 176)
-  tt.TextScaled = true
-  tt.Font = Enum.Font.GothamBold
-  tt.TextXAlignment = Enum.TextXAlignment.Left
-  tt.Parent = fr
-  local stat = Instance.new("TextLabel")
-  stat.Name = "Estado"
-  stat.Size = UDim2.new(1, -16, 0, 18)
-  stat.Position = UDim2.new(0, 8, 0, 27)
-  stat.BackgroundTransparency = 1
-  stat.Text = "Carro: ..."
-  stat.TextColor3 = Color3.fromRGB(255, 255, 255)
-  stat.TextScaled = true
-  stat.Font = Enum.Font.Gotham
-  stat.TextXAlignment = Enum.TextXAlignment.Left
-  stat.Parent = fr
-  local gd = Instance.new("TextLabel")
-  gd.Name = "Pasos"
-  gd.Size = UDim2.new(1, -16, 1, -54)
-  gd.Position = UDim2.new(0, 8, 0, 48)
-  gd.BackgroundTransparency = 1
-  gd.Text = "1. Ten tu carro spawneado\n2. Mira hacia donde lo quieres\n3. Pulsa Snap Car (Main)\nAparece frente a ti al instante"
-  gd.TextColor3 = Color3.fromRGB(220, 220, 228)
-  gd.TextSize = 14
-  gd.Font = Enum.Font.Gotham
-  gd.TextXAlignment = Enum.TextXAlignment.Left
-  gd.TextYAlignment = Enum.TextYAlignment.Top
-  gd.TextWrapped = true
-  gd.Parent = fr
-  snapGuideGui = g
-  snapGuideThread = task.spawn(function()
-   while snapGuideEnabled and g.Parent do
-    pcall(function()
-     local tiene = false
-     if typeof(getMyVehicle) == "function" then
-      tiene = getMyVehicle() ~= nil
-     end
-     local sl = g:FindFirstChild("Panel")
-     sl = sl and sl:FindFirstChild("Estado")
-     if sl then
-      sl.Text = tiene and "Carro: SI" or "Carro: NO"
-      sl.TextColor3 = tiene and Color3.fromRGB(120, 230, 140) or Color3.fromRGB(240, 120, 120)
-     end
-    end)
-    task.wait(0.5)
-   end
-  end)
- end)
-end
-
-local snapGuideToggle = a1:Toggle({
- Title = "Guia Snap Car (Esquina)",
- Desc = "Muestra la guia del Snap Car en la esquina con el estado de tu carro",
- Default = true,
- Callback = function(v)
-  snapGuideEnabled = v
-  if v then
-   snapGuideCreate()
-  else
-   snapGuideDestroy()
-  end
- end
-})
-D:Register("SnapCarGuide", snapGuideToggle)
-
-task.spawn(function()
- task.wait(0.8)
- if snapGuideEnabled and not snapGuideGui then
-  snapGuideCreate()
- end
-end)
 
 a1:Section({Title = "ITEMS AURA:"})
 
@@ -5524,6 +5260,183 @@ a.PlayerRemoving:Connect(function(player)
  w = {}
  end
 end)
+
+end
+do
+local espNombresEnabled = false
+local espVidaEnabled = false
+local espDistanciaEnabled = false
+
+local function kxGetRoot(plr)
+ local ch = plr and plr.Character
+ if not ch then return nil end
+ return ch:FindFirstChild("HumanoidRootPart")
+end
+
+local function kxMakeTextBillboard(nombre, texto, offsetY, color)
+ local g = Instance.new("BillboardGui")
+ g.Name = nombre
+ g.Size = UDim2.new(0, 200, 0, 26)
+ g.StudsOffset = Vector3.new(0, offsetY, 0)
+ g.AlwaysOnTop = true
+ g.MaxDistance = 800
+ local t = Instance.new("TextLabel")
+ t.Name = "Texto"
+ t.Size = UDim2.new(1, 0, 1, 0)
+ t.BackgroundTransparency = 1
+ t.Text = texto
+ t.TextColor3 = color
+ t.TextStrokeColor3 = Color3.new(0, 0, 0)
+ t.TextStrokeTransparency = 0.4
+ t.TextScaled = true
+ t.Font = Enum.Font.GothamBold
+ t.Parent = g
+ return g
+end
+
+local function kxMakeVidaBillboard()
+ local g = Instance.new("BillboardGui")
+ g.Name = "KingxEspVida"
+ g.Size = UDim2.new(0, 110, 0, 10)
+ g.StudsOffset = Vector3.new(0, 2.7, 0)
+ g.AlwaysOnTop = true
+ g.MaxDistance = 800
+ local fondo = Instance.new("Frame")
+ fondo.Name = "Fondo"
+ fondo.Size = UDim2.new(1, 0, 1, 0)
+ fondo.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ fondo.BorderSizePixel = 0
+ fondo.Parent = g
+ local fill = Instance.new("Frame")
+ fill.Name = "Relleno"
+ fill.Size = UDim2.new(1, 0, 1, 0)
+ fill.BackgroundColor3 = Color3.fromRGB(90, 220, 110)
+ fill.BorderSizePixel = 0
+ fill.Parent = fondo
+ return g
+end
+
+task.spawn(function()
+ while true do
+  task.wait(0.25)
+  pcall(function()
+   local myRoot = kxGetRoot(r)
+   for _, plr in ipairs(a:GetPlayers()) do
+    if plr ~= r then
+     local hrp = kxGetRoot(plr)
+     if hrp then
+      local nm = hrp:FindFirstChild("KingxEspName")
+      if espNombresEnabled then
+       if not nm then
+        nm = kxMakeTextBillboard("KingxEspName", plr.Name, 3.4, Color3.fromRGB(255, 255, 255))
+        nm.Parent = hrp
+       end
+      else
+       if nm then nm:Destroy() end
+      end
+      local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+      local vd = hrp:FindFirstChild("KingxEspVida")
+      if espVidaEnabled and hum then
+       if not vd then
+        vd = kxMakeVidaBillboard()
+        vd.Parent = hrp
+       end
+       local frac = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+       local fill = vd:FindFirstChild("Fondo")
+       fill = fill and fill:FindFirstChild("Relleno")
+       if fill then
+        fill.Size = UDim2.new(frac, 0, 1, 0)
+        if frac > 0.6 then
+         fill.BackgroundColor3 = Color3.fromRGB(90, 220, 110)
+        elseif frac > 0.3 then
+         fill.BackgroundColor3 = Color3.fromRGB(240, 210, 80)
+        else
+         fill.BackgroundColor3 = Color3.fromRGB(235, 80, 80)
+        end
+       end
+      else
+       if vd then vd:Destroy() end
+      end
+      local ds = hrp:FindFirstChild("KingxEspDist")
+      if espDistanciaEnabled then
+       if not ds then
+        ds = kxMakeTextBillboard("KingxEspDist", "...", 2.3, Color3.fromRGB(170, 200, 255))
+        ds.Parent = hrp
+       end
+       if myRoot then
+        ds.Texto.Text = tostring(math.floor((myRoot.Position - hrp.Position).Magnitude + 0.5)) .. " m"
+       end
+      else
+       if ds then ds:Destroy() end
+      end
+     end
+    end
+   end
+  end)
+ end
+end)
+
+aW:Section({Title = "ESP:"})
+
+local espT1 = aW:Toggle({
+ Title = "ESP Ítems",
+ Desc = "Muestra el nombre de los items a traves de las paredes",
+ Default = false,
+ Callback = function(v)
+ espItemsEnabled = v
+ end
+})
+D:Register("VisualEspItems", espT1)
+
+local espT2 = aW:Toggle({
+ Title = "ESP Distancia Items",
+ Desc = "Muestra la distancia de los items junto al nombre",
+ Default = false,
+ Callback = function(v)
+ espDropDistEnabled = v
+ end
+})
+D:Register("VisualEspDropDist", espT2)
+
+local espT3 = aW:Toggle({
+ Title = "ESP Cajas Pickup",
+ Desc = "Muestra una caja sobre los items pickup",
+ Default = false,
+ Callback = function(v)
+ espPickupBoxEnabled = v
+ end
+})
+D:Register("VisualEspPickupBox", espT3)
+
+local espT4 = aW:Toggle({
+ Title = "ESP Nombres",
+ Desc = "Muestra el nombre de los jugadores a traves de las paredes",
+ Default = false,
+ Callback = function(v)
+ espNombresEnabled = v
+ end
+})
+D:Register("EspNombres", espT4)
+
+local espT5 = aW:Toggle({
+ Title = "ESP Vida",
+ Desc = "Muestra la barra de vida de los jugadores",
+ Default = false,
+ Callback = function(v)
+ espVidaEnabled = v
+ end
+})
+D:Register("EspVida", espT5)
+
+local espT6 = aW:Toggle({
+ Title = "ESP Distancia",
+ Desc = "Muestra la distancia a los jugadores",
+ Default = false,
+ Callback = function(v)
+ espDistanciaEnabled = v
+ end
+})
+D:Register("EspDistancia", espT6)
 end
 do
  task.spawn(function()
