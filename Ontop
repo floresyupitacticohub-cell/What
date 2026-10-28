@@ -4027,7 +4027,17 @@ end
 
 local function pickAnonName()
  local pool = getAnonNamePool()
- anonNombreActual = pool[math.random(1, #pool)]
+ if #pool > 1 then
+  local nx = anonNombreActual
+  local guard = 0
+  while nx == anonNombreActual and guard < 10 do
+   nx = pool[math.random(1, #pool)]
+   guard = guard + 1
+  end
+  anonNombreActual = nx
+ else
+  anonNombreActual = pool[1]
+ end
  return anonNombreActual
 end
 
@@ -4085,7 +4095,7 @@ local function startHideNameLoop()
  end
  end
  end)
- if os.clock() - lastPick >= 3 then
+ if os.clock() - lastPick >= 0.2 then
  lastPick = os.clock()
  pickAnonName()
  end
@@ -4125,7 +4135,7 @@ end
 
 local bb = a1:Toggle({
  Title = "Nombre anónimo",
- Desc = "Cambia tu nombre por uno aleatorio de los del servidor o SASWERE KINGX",
+ Desc = "Cambia tu nombre cada 0.2s entre los del servidor y SASWERE KINGX",
  Default = false,
  Callback = function(state)
  hideNameEnabled = state
@@ -4244,9 +4254,74 @@ local function tagClearAll()
  end
 end
 
+local tagRotThread = nil
+local tagNombreActual = "SASWERE KINGX"
+
+local function tagGetPool()
+ local pool = {}
+ if tagTexto and tagTexto ~= "" then
+  table.insert(pool, tagTexto)
+ end
+ pcall(function()
+  for _, plr in ipairs(a:GetPlayers()) do
+   if plr.Name and plr.Name ~= "" then
+    table.insert(pool, plr.Name)
+   end
+  end
+ end)
+ if #pool == 0 then
+  pool = {"SASWERE KINGX"}
+ end
+ return pool
+end
+
+local function tagPickName()
+ local pool = tagGetPool()
+ if #pool > 1 then
+  local nx = tagNombreActual
+  local guard = 0
+  while nx == tagNombreActual and guard < 10 do
+   nx = pool[math.random(1, #pool)]
+   guard = guard + 1
+  end
+  tagNombreActual = nx
+ else
+  tagNombreActual = pool[1]
+ end
+ return tagNombreActual
+end
+
+local function tagStopRotation()
+ if tagRotThread then
+  pcall(function() task.cancel(tagRotThread) end)
+  tagRotThread = nil
+ end
+end
+
+local function tagStartRotation()
+ tagStopRotation()
+ tagRotThread = task.spawn(function()
+  while tagActive do
+   pcall(function()
+    local nx = tagPickName()
+    for _, plr in ipairs(a:GetPlayers()) do
+     local mk = tagMarks[plr]
+     if mk and mk.Parent then
+      local lb = mk:FindFirstChild("TagLabel")
+      if lb and lb:IsA("TextLabel") then
+       lb.Text = nx
+      end
+     end
+    end
+   end)
+   task.wait(0.2)
+  end
+ end)
+end
+
 local tagToggle = TagTab:Toggle({
  Title = "Tag",
- Desc = "Pone el nombre sobre la cabeza de todos los jugadores",
+ Desc = "Pone el nombre sobre la cabeza de todos y lo cambia cada 0.2s",
  Default = false,
  Callback = function(state)
   tagActive = state
@@ -4256,6 +4331,7 @@ local tagToggle = TagTab:Toggle({
   tagConns = {}
   if state then
    tagApplyAll()
+   tagStartRotation()
    table.insert(tagConns, a.PlayerAdded:Connect(function(plr)
     task.wait(0.5)
     tagApplyOne(plr)
@@ -4276,6 +4352,7 @@ local tagToggle = TagTab:Toggle({
     tagClearOne(plr)
    end))
   else
+   tagStopRotation()
    tagClearAll()
   end
  end
@@ -4536,6 +4613,126 @@ local snapCarBtn = a1:Button({
  end
 })
 D:Register("SnapCar", snapCarBtn)
+
+local snapGuideEnabled = true
+local snapGuideGui = nil
+local snapGuideThread = nil
+
+local function snapGuideDestroy()
+ if snapGuideThread then
+  pcall(function() task.cancel(snapGuideThread) end)
+  snapGuideThread = nil
+ end
+ if snapGuideGui then
+  pcall(function() snapGuideGui:Destroy() end)
+  snapGuideGui = nil
+ end
+end
+
+local function snapGuideCreate()
+ snapGuideDestroy()
+ pcall(function()
+  local pg = r:FindFirstChildOfClass("PlayerGui") or r:WaitForChild("PlayerGui", 5)
+  if not pg then return end
+  local g = Instance.new("ScreenGui")
+  g.Name = "KingxSnapGuide"
+  g.ResetOnSpawn = false
+  g.DisplayOrder = 50
+  g.Parent = pg
+  local fr = Instance.new("Frame")
+  fr.Name = "Panel"
+  fr.AnchorPoint = Vector2.new(1, 0)
+  fr.Position = UDim2.new(1, -10, 0, 10)
+  fr.Size = UDim2.new(0, 226, 0, 138)
+  fr.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+  fr.BackgroundTransparency = 0.12
+  fr.BorderSizePixel = 0
+  fr.Active = false
+  fr.Parent = g
+  local uc = Instance.new("UICorner")
+  uc.CornerRadius = UDim.new(0, 8)
+  uc.Parent = fr
+  local st = Instance.new("UIStroke")
+  st.Color = Color3.fromRGB(181, 119, 176)
+  st.Thickness = 1.5
+  st.Parent = fr
+  local tt = Instance.new("TextLabel")
+  tt.Name = "Titulo"
+  tt.Size = UDim2.new(1, -16, 0, 22)
+  tt.Position = UDim2.new(0, 8, 0, 4)
+  tt.BackgroundTransparency = 1
+  tt.Text = "SNAP CAR - GUIA"
+  tt.TextColor3 = Color3.fromRGB(181, 119, 176)
+  tt.TextScaled = true
+  tt.Font = Enum.Font.GothamBold
+  tt.TextXAlignment = Enum.TextXAlignment.Left
+  tt.Parent = fr
+  local stat = Instance.new("TextLabel")
+  stat.Name = "Estado"
+  stat.Size = UDim2.new(1, -16, 0, 18)
+  stat.Position = UDim2.new(0, 8, 0, 27)
+  stat.BackgroundTransparency = 1
+  stat.Text = "Carro: ..."
+  stat.TextColor3 = Color3.fromRGB(255, 255, 255)
+  stat.TextScaled = true
+  stat.Font = Enum.Font.Gotham
+  stat.TextXAlignment = Enum.TextXAlignment.Left
+  stat.Parent = fr
+  local gd = Instance.new("TextLabel")
+  gd.Name = "Pasos"
+  gd.Size = UDim2.new(1, -16, 1, -54)
+  gd.Position = UDim2.new(0, 8, 0, 48)
+  gd.BackgroundTransparency = 1
+  gd.Text = "1. Ten tu carro spawneado\n2. Mira hacia donde lo quieres\n3. Pulsa Snap Car (Main)\nAparece frente a ti al instante"
+  gd.TextColor3 = Color3.fromRGB(220, 220, 228)
+  gd.TextSize = 14
+  gd.Font = Enum.Font.Gotham
+  gd.TextXAlignment = Enum.TextXAlignment.Left
+  gd.TextYAlignment = Enum.TextYAlignment.Top
+  gd.TextWrapped = true
+  gd.Parent = fr
+  snapGuideGui = g
+  snapGuideThread = task.spawn(function()
+   while snapGuideEnabled and g.Parent do
+    pcall(function()
+     local tiene = false
+     if typeof(getMyVehicle) == "function" then
+      tiene = getMyVehicle() ~= nil
+     end
+     local sl = g:FindFirstChild("Panel")
+     sl = sl and sl:FindFirstChild("Estado")
+     if sl then
+      sl.Text = tiene and "Carro: SI" or "Carro: NO"
+      sl.TextColor3 = tiene and Color3.fromRGB(120, 230, 140) or Color3.fromRGB(240, 120, 120)
+     end
+    end)
+    task.wait(0.5)
+   end
+  end)
+ end)
+end
+
+local snapGuideToggle = a1:Toggle({
+ Title = "Guia Snap Car (Esquina)",
+ Desc = "Muestra la guia del Snap Car en la esquina con el estado de tu carro",
+ Default = true,
+ Callback = function(v)
+  snapGuideEnabled = v
+  if v then
+   snapGuideCreate()
+  else
+   snapGuideDestroy()
+  end
+ end
+})
+D:Register("SnapCarGuide", snapGuideToggle)
+
+task.spawn(function()
+ task.wait(0.8)
+ if snapGuideEnabled and not snapGuideGui then
+  snapGuideCreate()
+ end
+end)
 
 a1:Section({Title = "ITEMS AURA:"})
 
